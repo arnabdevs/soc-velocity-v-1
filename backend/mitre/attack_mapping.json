@@ -1,0 +1,26 @@
+{
+    "PortScan": {
+        "technique_id": "T1046",
+        "technique_name": "Network Service Scanning",
+        "description": "Adversaries may attempt to get a listing of services running on remote hosts, including those that may be vulnerable to remote software exploitation.",
+        "severity": "Medium"
+    },
+    "BruteForce": {
+        "technique_id": "T1110",
+        "technique_name": "Brute Force",
+        "description": "Adversaries may use brute force techniques to gain access to accounts by guessing passwords or other authentication credentials.",
+        "severity": "High"
+    },
+    "Anomaly": {
+        "technique_id": "T1000",
+        "technique_name": "Unknown Anomaly/Zero-Day behavior",
+        "description": "The system detected behavior that deviates significantly from normal traffic patterns, potentially indicating a new or unknown threat.",
+        "severity": "Critical"
+    },
+    "BENIGN": {
+        "technique_id": "N/A",
+        "technique_name": "Normal Traffic",
+        "description": "Normal network behavior.",
+        "severity": "Low"
+    }
+}

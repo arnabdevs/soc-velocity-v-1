@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+.venv
+env/
+venv/
+ENV/
+build/
+dist/
+
+# Node
+node_modules/
+.DS_Store
+
+# IDEs
+.vscode/
+.idea/
+
+# SOC Specific
+*.joblib
+data/simulated_traffic.csv
+results/*.png
+results/*.pdf
+brain/

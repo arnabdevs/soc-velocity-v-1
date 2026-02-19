@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AEGIS SOC | AI-Driven Threat Intel</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+    <!-- Professional Access Portal Overlay -->
+    <div id="access-portal" class="access-portal">
+        <div class="portal-box">
+            <div class="logo" style="font-size: 2.5rem; margin-bottom: 1rem;">AEGIS SOC</div>
+            <p style="color: #888; margin-bottom: 2rem;">ADVANCED THREAT DETECTION ENGINE v1.0</p>
+
+            <div class="input-group">
+                <input type="password" id="api-key-input" placeholder="ENTER SECURE ACCESS KEY">
+                <button onclick="handleLogin()" class="btn-primary">ACCESS MISSION CONTROL</button>
+            </div>
+
+            <div class="divider">OR</div>
+
+            <button onclick="enterGuestMode()" class="btn-secondary">EXPLORE AS GUEST (READ-ONLY)</button>
+
+            <p id="login-error" style="color: var(--danger); margin-top: 1rem; font-size: 0.8rem; display: none;">
+                INVALID ACCESS KEY. ATTEMPT LOGGED.</p>
+        </div>
+    </div>
+
+    <div class="mission-control">
+        <header>
+            <div class="logo">AEGIS SOC ENGINE</div>
+            <div class="status-bar">
+                <div class="status-item">ENGINE STATUS: <span id="engine-status">INITIALIZING...</span></div>
+                <div class="status-item">UPTIME: <span id="uptime">00:00:00</span></div>
+            </div>
+        </header>
+
+        <aside>
+            <nav>
+                <ul>
+                    <li class="active">EXECUTIVE OVERVIEW</li>
+                    <li>THREAT ACTIVITY</li>
+                    <li>DATA ANALYTICS</li>
+                    <li>SECURITY STRATEGY</li>
+                </ul>
+            </nav>
+        </aside>
+
+        <main>
+            <!-- Executive Overview (Client-Facing) -->
+            <div id="executive-overview-view" class="view">
+                <div class="content-area">
+                    <div style="display: grid; grid-template-columns: 1fr 200px; gap: 1rem; margin-bottom: 1rem;">
+                        <div
+                            style="background: linear-gradient(135deg, rgba(0,242,255,0.1), rgba(112,0,255,0.1)); padding: 2.5rem; border-radius: 12px; border: 1px solid rgba(0,242,255,0.2); display: flex; flex-direction: column; justify-content: center;">
+                            <h2 style="color: var(--primary); font-size: 1.8rem; margin-bottom: 0.5rem;">STATUS:
+                                COMPROMISE REFUSED</h2>
+                            <p style="color: #ccc; font-size: 1.1rem; margin-bottom: 1.5rem;">Your AI Guardian is
+                                active. No critical breaches have been detected in the last 24 hours.</p>
+
+                            <div style="position: relative; margin-bottom: 1.5rem;">
+                                <input type="text" id="global-site-search"
+                                    placeholder="🔍 SEARCH THREATS BY WEBSITE (e.g. clint-website.com)"
+                                    style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 1.2rem; border-radius: 8px; color: white; outline: none; transition: border 0.3s; font-size: 1rem;">
+                            </div>
+
+                            <div style="display: flex; gap: 1rem;">
+                                <button onclick="simulateAttack('SQL Injection')" class="btn-primary"
+                                    style="padding: 0.8rem 1.5rem; font-size: 0.8rem; flex: 1;">SIMULATE SQLi</button>
+                                <button onclick="simulateAttack('DDoS Attack')" class="btn-primary"
+                                    style="padding: 0.8rem 1.5rem; font-size: 0.8rem; flex: 1;">SIMULATE DDoS</button>
+                                <button onclick="simulateAttack('Credential Stuffing')" class="btn-primary"
+                                    style="padding: 0.8rem 1.5rem; font-size: 0.8rem; flex: 1;">SIMULATE
+                                    BRUTEFORCE</button>
+                            </div>
+                        </div>
+
+                        <div
+                            style="background: var(--panel-bg); border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 1rem;">
+                            <div style="font-size: 0.7rem; color: #666; margin-bottom: 1rem;">SECURITY SCORE</div>
+                            <div
+                                style="width: 120px; height: 120px; border-radius: 50%; border: 8px solid var(--success); display: flex; align-items: center; justify-content: center; font-family: monospace; font-size: 2.2rem; font-weight: 800; color: var(--success); box-shadow: 0 0 20px rgba(0,255,136,0.2);">
+                                98
+                            </div>
+                            <div style="font-size: 0.8rem; color: var(--success); margin-top: 1rem; font-weight: bold;">
+                                OPTIMAL</div>
+                        </div>
+                    </div>
+
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <h3>Total Analyzed</h3>
+                            <p id="total-analyzed">0</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Threats Blocked</h3>
+                            <p id="threats-blocked">0</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Active Anomalies</h3>
+                            <p id="active-anomalies">0</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Engine Health</h3>
+                            <p id="system-health">INITIALIZING</p>
+                        </div>
+                    </div>
+
+                    <div class="alert-feed" id="alert-feed">
+                        <h2>LIVE THREAT STREAM</h2>
+                        <div class="alert-item Low" style="opacity: 0.5;">
+                            <div class="alert-header">
+                                <span class="alert-type">System State</span>
+                                <span class="alert-severity">Normal</span>
+                            </div>
+                            <div class="alert-details">Awaiting connection to AI Brain...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mitre-panel">
+                    <h2 style="font-size: 1rem; margin-bottom: 1.5rem;">STRATEGY ANALYSIS</h2>
+                    <div id="mitre-content">
+                        <p style="color: #666; font-size: 0.9rem;">Select a live threat to view the MITRE ATT&CK®
+                            technique and mitigation strategy.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Threat Activity View -->
+            <div id="threat-activity-view" class="view hidden">
+                <div class="content-area" style="grid-column: 1 / -1;">
+                    <div
+                        style="background: var(--panel-bg); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 1.5rem; height: 100%;">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                            <h2 style="font-size: 1.2rem;">THREAT HUNT LOGS</h2>
+                            <input type="text" id="log-search" placeholder="SEARCH BY ALERT ID OR TYPE..."
+                                style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 0.8rem 1.2rem; border-radius: 8px; color: white; width: 300px;">
+                        </div>
+                        <div style="overflow-x: auto;">
+                            <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem;">
+                                <thead style="background: rgba(0,242,255,0.05); color: var(--primary);">
+                                    <tr>
+                                        <th style="padding: 1rem;">TIMESTAMP</th>
+                                        <th style="padding: 1rem;">ALERT TYPE</th>
+                                        <th style="padding: 1rem;">SEVERITY</th>
+                                        <th style="padding: 1rem;">MITRE TECHNIQUE</th>
+                                        <th style="padding: 1rem;">CONFIDENCE</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="log-table-body">
+                                    <!-- Log rows will be injected here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Data Analytics View -->
+            <div id="data-analytics-view" class="view hidden">
+                <div class="content-area">
+                    <div
+                        style="background: var(--panel-bg); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 1.5rem; flex: 1;">
+                        <h2 style="font-size: 1rem; margin-bottom: 1.5rem;">FEATURE IMPORTANCE (ML)</h2>
+                        <canvas id="feature-chart"></canvas>
+                    </div>
+                </div>
+                <div class="content-area">
+                    <div
+                        style="background: var(--panel-bg); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 1.5rem; flex: 1;">
+                        <h2 style="font-size: 1rem; margin-bottom: 1.5rem;">THREAT TRENDS (24H)</h2>
+                        <canvas id="trend-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Security Strategy View -->
+            <div id="security-strategy-view" class="view hidden">
+                <div class="content-area" style="grid-column: 1 / -1;">
+                    <div
+                        style="background: var(--panel-bg); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 2rem;">
+                        <h2 style="font-size: 1.2rem; margin-bottom: 1.5rem;">MITRE ATT&CK® MATRIX COVERAGE</h2>
+                        <div id="mitre-matrix-grid"
+                            style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem;">
+                            <!-- Matrix cells injected by JS -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings View -->
+            <div id="data-analytics-view" class="view hidden">
+                <div
+                    style="padding: 2rem; background: var(--panel-bg); border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); grid-column: 1/-1;">
+                    <h2 style="color: var(--primary)">ENGINE SETTINGS</h2>
+                    <p style="margin-top: 1rem; color: #aaa">Configure detection thresholds and API integrations.</p>
+                </div>
+            </div>
+        </main>
+    </div>
+    <script src="main.js"></script>
+</body>
+
+</html>

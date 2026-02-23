@@ -140,8 +140,20 @@ def run_real_scan():
         except Exception as whois_e:
             domain_info = {"error": f"WHOIS Unavailable ({str(whois_e)[:20]})"}
 
-        # 5. Final Health & Reporting
-        # -15 per open port, -5 per filtered port, -10 per web issue
+        # 5. Intelligent Recommendations
+        recommendations = []
+        if open_ports:
+            recommendations.append(f"Close non-essential ports: {', '.join(open_ports[:3])}")
+        if "Missing HSTS" in web_issues:
+            recommendations.append("Enable HTTP Strict Transport Security (HSTS)")
+        if "Missing CSP" in web_issues:
+            recommendations.append("Implement a robust Content Security Policy (CSP)")
+        if "Missing Clickjacking Protection" in web_issues:
+            recommendations.append("Add X-Frame-Options or CSP frame-ancestors header")
+        if not recommendations:
+            recommendations.append("Maintain current security posture and monitor logs.")
+
+        # 6. Final Health & Reporting
         health_score = 100 - (len(open_ports) * 15) - (len(filtered_ports) * 5) - (len(web_issues) * 10)
         health_score = max(5, min(100, health_score))
         
@@ -150,14 +162,6 @@ def run_real_scan():
         STATS["vulnerabilities_found"] += len(open_ports) + len([w for w in web_issues if "Missing" in w])
         STATS["last_scan_target"] = target
         
-        detail_msg = f"Intelligence report for {target}:"
-        if open_ports:
-            detail_msg += f" Detected services: {', '.join(services[:3])}."
-        if web_issues:
-            detail_msg += f" Found {len(web_issues)} web security gaps."
-        if domain_info.get('registrar'):
-            detail_msg += f" Registered via {domain_info['registrar']}."
-            
         scan_alert = {
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "alert_id": "REAL-" + os.urandom(2).hex().upper(),
@@ -166,13 +170,14 @@ def run_real_scan():
             "confidence": 99,
             "mitre_technique": "T1046",
             "technique_name": "Network Service Scanning",
-            "description": detail_msg,
+            "description": f"Comprehensive security audit for {target} complete.",
             "target_site": target,
             "health_score": health_score,
             "raw_output": stdout,
             "detected_services": services,
             "web_security_issues": web_issues,
-            "domain_info": domain_info
+            "domain_info": domain_info,
+            "recommendations": recommendations
         }
         
         simulated_threat_queue.append(scan_alert)

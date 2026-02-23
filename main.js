@@ -14,8 +14,23 @@ console.log(`🔗 CONNECTING TO API: ${API_BASE}`);
 
 function initDashboard() {
     console.log("🚀 Initializing AEGIS Mission Control...");
+    checkBackend();
     fetchStats();
     fetchAlerts();
+}
+
+async function checkBackend() {
+    try {
+        const response = await fetch(`${API_BASE}/api/health`);
+        const data = await response.json();
+        console.log("✅ Backend connection verified:", data);
+        document.getElementById('engine-status').textContent = "ACTIVE";
+        document.getElementById('engine-status').style.color = "var(--success)";
+    } catch (e) {
+        console.error("❌ Backend unreachable:", e);
+        document.getElementById('engine-status').textContent = "OFFLINE (Start backend/app.py)";
+        document.getElementById('engine-status').style.color = "var(--danger)";
+    }
 }
 
 // Public access - skip auth
@@ -107,11 +122,22 @@ function showMitreDetails(alert) {
         `;
     }
 
+    if (alert.recommendations && alert.recommendations.length > 0) {
+        findingsHtml += `
+            <div style="margin-top: 1rem; padding: 1rem; background: rgba(0,255,136,0.05); border-radius: 8px; border: 1px solid rgba(0,255,136,0.2);">
+                <h4 style="color: var(--success); font-size: 0.8rem; margin-bottom: 0.5rem;">SECURITY RECOMMENDATIONS</h4>
+                <ul style="font-size: 0.8rem; padding-left: 1rem; color: #ccc;">
+                    ${alert.recommendations.map(rec => `<li>${rec}</li>`).join('')}
+                </ul>
+            </div>
+        `;
+    }
+
     mitreContent.innerHTML = `
         <div style="background: rgba(0, 242, 255, 0.05); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--primary)">
-            <h3 style="color: var(--primary); margin-bottom: 0.5rem">${alert.technique_name}</h3>
-            <p style="font-family: monospace; color: var(--secondary); margin-bottom: 1rem; font-size: 0.8rem;">${alert.mitre_technique || 'VULN-ANALYSIS'}</p>
-            <p style="font-size: 0.9rem; line-height: 1.6">${alert.description}</p>
+            <h2 style="color: var(--primary); font-size: 1.2rem; margin-bottom: 0.5rem;">Report for: ${alert.target_site}</h2>
+            <p style="font-family: monospace; color: var(--secondary); margin-bottom: 1rem; font-size: 0.8rem;">${alert.technique_name} | ${alert.alert_id}</p>
+            <p style="font-size: 0.9rem; line-height: 1.6; margin-bottom: 1rem;">${alert.description}</p>
             
             ${findingsHtml}
             

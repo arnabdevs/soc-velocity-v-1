@@ -107,9 +107,11 @@ def run_real_scan():
         # Pattern: PORT/tcp STATE SERVICE
         matches = re.findall(r'(\d+)/tcp\s+(\w+)\s+(.+)', stdout)
         
-        open_ports = [m[0] for m in matches if m[1] == 'open']
-        filtered_ports = [m[0] for m in matches if m[1] == 'filtered']
-        services = [m[2].strip() for m in matches if m[1] == 'open']
+        open_ports = [m[0] for m in matches if 'open' in m[1]]
+        filtered_ports = [m[0] for m in matches if 'filtered' in m[1]]
+        services = [m[2].strip() for m in matches if 'open' in m[1]]
+        
+        print(f"DEBUG: Found {len(open_ports)} open ports and {len(filtered_ports)} filtered ports.")
         
         # 2. Lightweight Web Analysis (Real Output)
         web_issues = []
@@ -134,15 +136,19 @@ def run_real_scan():
         domain_info = {}
         if whois:
             try:
+                print(f"DEBUG: Fetching WHOIS for {target}...")
                 w = whois.whois(target)
                 domain_info = {
                     "registrar": w.registrar if hasattr(w, 'registrar') else "Unknown",
                     "creation_date": str(w.creation_date[0]) if isinstance(w.creation_date, list) else str(w.creation_date),
                     "expiration_date": str(w.expiration_date[0]) if isinstance(w.expiration_date, list) else str(w.expiration_date)
                 }
+                print(f"DEBUG: WHOIS success: {domain_info['registrar']}")
             except Exception as whois_e:
+                print(f"DEBUG: WHOIS failed: {str(whois_e)}")
                 domain_info = {"error": f"WHOIS Unavailable ({str(whois_e)[:20]})"}
         else:
+            print("DEBUG: WHOIS module NOT LOADED")
             domain_info = {"error": "WHOIS module not loaded"}
 
         # 5. Intelligent Recommendations
@@ -162,9 +168,17 @@ def run_real_scan():
         health_score = 100 - (len(open_ports) * 15) - (len(filtered_ports) * 5) - (len(web_issues) * 10)
         health_score = max(5, min(100, health_score))
         
+        description = f"Comprehensive security audit for {target} complete. "
+        if health_score == 100:
+            description += "No immediate security vulnerabilities or open ports detected. The target appears to have a strong security posture."
+        elif health_score > 80:
+            description += "Target is generally secure but some minor information leaks or missing headers were detected."
+        else:
+            description += f"Warning: multiple potential entry points found. {len(open_ports)} open ports and {len(web_issues)} web security gaps identified."
+
         # Update Real Stats
         STATS["total_scans"] += 1
-        STATS["vulnerabilities_found"] += len(open_ports) + len([w for w in web_issues if "Missing" in w])
+        STATS["vulnerabilities_found"] += len(open_ports) + len([w for w in web_issues if "Missing" in w and "Unavailable" not in w])
         STATS["last_scan_target"] = target
         
         scan_alert = {
@@ -175,11 +189,11 @@ def run_real_scan():
             "confidence": 99,
             "mitre_technique": "T1046",
             "technique_name": "Network Service Scanning",
-            "description": f"Comprehensive security audit for {target} complete.",
+            "description": description,
             "target_site": target,
             "health_score": health_score,
             "raw_output": stdout,
-            "detected_services": services,
+            "detected_services": services[:10], # Cap to 10 for UI
             "web_security_issues": web_issues,
             "domain_info": domain_info,
             "recommendations": recommendations

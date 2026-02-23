@@ -61,6 +61,12 @@ async function fetchAlerts() {
             const histResp = await fetch(`${API_BASE}/api/logs`);
             const history = await histResp.json();
             alerts = history.slice(0, 5); // Just show the latest 5 in the feed
+
+            // Auto-show the most recent intelligence report if it exists
+            if (alerts.length > 0) {
+                console.log("📍 Auto-loading most recent security report...");
+                showMitreDetails(alerts[0]);
+            }
         }
 
         alerts.forEach(alert => addAlertToFeed(alert));

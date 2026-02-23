@@ -90,13 +90,17 @@ function addAlertToFeed(alert) {
 }
 
 function showMitreDetails(alert) {
+    if (!mitreContent) return;
+
     let findingsHtml = '';
 
     if (alert.web_security_issues && alert.web_security_issues.length > 0) {
         findingsHtml += `
-            <div style="margin-top: 1rem;">
-                <h4 style="color: var(--warning); font-size: 0.8rem; margin-bottom: 0.5rem;">WEB SECURITY GAPS</h4>
-                <ul style="font-size: 0.8rem; padding-left: 1rem; color: #ccc;">
+            <div style="margin-top: 1rem; padding: 1rem; background: rgba(255,204,0,0.05); border-radius: 8px; border: 1px solid rgba(255,204,0,0.2);">
+                <h4 style="color: var(--warning); font-size: 0.8rem; margin-bottom: 0.8rem; display: flex; align-items: center; gap: 0.5rem;">
+                    <span>⚠️</span> WEB SECURITY GAPS
+                </h4>
+                <ul style="font-size: 0.85rem; padding-left: 1.2rem; color: #ddd; line-height: 1.5;">
                     ${alert.web_security_issues.map(issue => `<li>${issue}</li>`).join('')}
                 </ul>
             </div>
@@ -106,9 +110,9 @@ function showMitreDetails(alert) {
     if (alert.detected_services && alert.detected_services.length > 0) {
         findingsHtml += `
             <div style="margin-top: 1rem;">
-                <h4 style="color: var(--primary); font-size: 0.8rem; margin-bottom: 0.5rem;">DETECTED SERVICES</h4>
-                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                    ${alert.detected_services.map(s => `<span style="background: rgba(0,242,255,0.1); padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; border: 1px solid rgba(0,242,255,0.2);">${s}</span>`).join('')}
+                <h4 style="color: var(--primary); font-size: 0.8rem; margin-bottom: 0.8rem;">DETECTED SERVICES</h4>
+                <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+                    ${alert.detected_services.map(s => `<span style="background: rgba(0,242,255,0.1); padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; border: 1px solid rgba(0,242,255,0.3); color: white;">${s}</span>`).join('')}
                 </div>
             </div>
         `;
@@ -118,10 +122,9 @@ function showMitreDetails(alert) {
         findingsHtml += `
             <div style="margin-top: 1rem; padding: 1rem; background: rgba(112,0,255,0.05); border-radius: 8px; border: 1px solid rgba(112,0,255,0.2);">
                 <h4 style="color: var(--secondary); font-size: 0.8rem; margin-bottom: 0.5rem;">DOMAIN INTELLIGENCE</h4>
-                <div style="font-size: 0.75rem; color: #aaa; display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
-                    <div>Registrar: <span style="color: white;">${alert.domain_info.registrar}</span></div>
-                    <div>Created: <span style="color: white;">${alert.domain_info.creation_date.split(' ')[0]}</span></div>
-                    <div>Expires: <span style="color: white;">${alert.domain_info.expiration_date.split(' ')[0]}</span></div>
+                <div style="font-size: 0.8rem; color: #ccc; display: grid; grid-template-columns: 1fr; gap: 0.4rem;">
+                    <div>Registrar: <span style="color: white; font-family: monospace;">${alert.domain_info.registrar}</span></div>
+                    <div>Status: <span style="color: var(--success);">ACTIVE</span></div>
                 </div>
             </div>
         `;
@@ -130,8 +133,8 @@ function showMitreDetails(alert) {
     if (alert.recommendations && alert.recommendations.length > 0) {
         findingsHtml += `
             <div style="margin-top: 1rem; padding: 1rem; background: rgba(0,255,136,0.05); border-radius: 8px; border: 1px solid rgba(0,255,136,0.2);">
-                <h4 style="color: var(--success); font-size: 0.8rem; margin-bottom: 0.5rem;">SECURITY RECOMMENDATIONS</h4>
-                <ul style="font-size: 0.8rem; padding-left: 1rem; color: #ccc;">
+                <h4 style="color: var(--success); font-size: 0.8rem; margin-bottom: 0.8rem;">REMEDIATION STRATEGY</h4>
+                <ul style="font-size: 0.85rem; padding-left: 1.2rem; color: #ccc; line-height: 1.5;">
                     ${alert.recommendations.map(rec => `<li>${rec}</li>`).join('')}
                 </ul>
             </div>
@@ -139,19 +142,25 @@ function showMitreDetails(alert) {
     }
 
     mitreContent.innerHTML = `
-        <div style="background: rgba(0, 242, 255, 0.05); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--primary)">
-            <h2 style="color: var(--primary); font-size: 1.2rem; margin-bottom: 0.5rem;">Report for: ${alert.target_site}</h2>
-            <p style="font-family: monospace; color: var(--secondary); margin-bottom: 1rem; font-size: 0.8rem;">${alert.technique_name} | ${alert.alert_id}</p>
-            <p style="font-size: 0.9rem; line-height: 1.6; margin-bottom: 1rem;">${alert.description}</p>
+        <div style="animation: fadeIn 0.5s ease-out;">
+            <div style="background: linear-gradient(135deg, rgba(0,242,255,0.1), transparent); padding: 1rem; border-radius: 8px; border-left: 4px solid var(--primary); margin-bottom: 1.5rem;">
+                <h2 style="color: white; font-size: 1.1rem; margin-bottom: 0.2rem;">${alert.target_site}</h2>
+                <p style="font-family: monospace; color: var(--primary); font-size: 0.75rem;">${alert.alert_id} | CONFIDENCE: ${alert.confidence}%</p>
+            </div>
+            
+            <p style="font-size: 0.9rem; line-height: 1.6; color: #eee; margin-bottom: 1rem;">${alert.description}</p>
             
             ${findingsHtml}
             
             <div style="margin-top: 1.5rem;">
-                <h4 style="color: #666; font-size: 0.7rem; margin-bottom: 0.5rem;">RAW NMAP OUTPUT</h4>
-                <pre style="background: #000; color: #0f8; padding: 0.8rem; border-radius: 4px; font-size: 0.7rem; overflow-x: auto; max-height: 150px; border: 1px solid #333;">${alert.raw_output || 'No raw output available.'}</pre>
+                <h4 style="color: #555; font-size: 0.7rem; margin-bottom: 0.5rem; text-transform: uppercase;">Technical Evidence</h4>
+                <pre style="background: #000; color: #0f8; padding: 1rem; border-radius: 6px; font-size: 0.75rem; overflow-x: auto; max-height: 200px; border: 1px solid #222; font-family: 'Courier New', monospace;">${alert.raw_output || 'No technical evidence found.'}</pre>
             </div>
         </div>
     `;
+
+    // Auto-scroll to top of result
+    mitreContent.parentElement.scrollTop = 0;
 }
 
 window.runLiveScan = async function () {

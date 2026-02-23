@@ -13,25 +13,7 @@
 </head>
 
 <body>
-    <!-- Professional Access Portal Overlay -->
-    <div id="access-portal" class="access-portal">
-        <div class="portal-box">
-            <div class="logo" style="font-size: 2.5rem; margin-bottom: 1rem;">AEGIS SOC</div>
-            <p style="color: #888; margin-bottom: 2rem;">ADVANCED THREAT DETECTION ENGINE v1.0</p>
-
-            <div class="input-group">
-                <input type="password" id="api-key-input" placeholder="ENTER SECURE ACCESS KEY">
-                <button onclick="handleLogin()" class="btn-primary">ACCESS MISSION CONTROL</button>
-            </div>
-
-            <div class="divider">OR</div>
-
-            <button onclick="enterGuestMode()" class="btn-secondary">EXPLORE AS GUEST (READ-ONLY)</button>
-
-            <p id="login-error" style="color: var(--danger); margin-top: 1rem; font-size: 0.8rem; display: none;">
-                INVALID ACCESS KEY. ATTEMPT LOGGED.</p>
-        </div>
-    </div>
+    <!-- Professional Access Portal Overlay Removed for Public Access -->
 
     <div class="mission-control">
         <header>
@@ -45,51 +27,56 @@
         <aside>
             <nav>
                 <ul>
-                    <li class="active">EXECUTIVE OVERVIEW</li>
-                    <li>THREAT ACTIVITY</li>
-                    <li>DATA ANALYTICS</li>
-                    <li>SECURITY STRATEGY</li>
+                    <li class="active">MISSION CONTROL</li>
+                    <li>IDENTITY</li>
+                    <li>VULNERABILITY LOGS</li>
+                    <li>THREAT HUB</li>
                 </ul>
             </nav>
         </aside>
 
         <main>
-            <!-- Executive Overview (Client-Facing) -->
-            <div id="executive-overview-view" class="view">
+            <!-- Mission Control (Main Dashboard) -->
+            <div id="mission-control-view" class="view">
                 <div class="content-area">
                     <div style="display: grid; grid-template-columns: 1fr 200px; gap: 1rem; margin-bottom: 1rem;">
                         <div
                             style="background: linear-gradient(135deg, rgba(0,242,255,0.1), rgba(112,0,255,0.1)); padding: 2.5rem; border-radius: 12px; border: 1px solid rgba(0,242,255,0.2); display: flex; flex-direction: column; justify-content: center;">
-                            <h2 style="color: var(--primary); font-size: 1.8rem; margin-bottom: 0.5rem;">STATUS:
-                                COMPROMISE REFUSED</h2>
-                            <p style="color: #ccc; font-size: 1.1rem; margin-bottom: 1.5rem;">Your AI Guardian is
-                                active. No critical breaches have been detected in the last 24 hours.</p>
+                            <h2 style="color: var(--primary); font-size: 1.8rem; margin-bottom: 0.5rem;">STATUS: ENGINE
+                                ACTIVE</h2>
+                            <p style="color: #ccc; font-size: 1.1rem; margin-bottom: 1.5rem;">Input a website URL to
+                                detect vulnerabilities and malware in real-time.</p>
 
-                            <div style="position: relative; margin-bottom: 1.5rem;">
-                                <input type="text" id="global-site-search"
-                                    placeholder="🔍 SEARCH THREATS BY WEBSITE (e.g. clint-website.com)"
+                            <div style="position: relative; margin-bottom: 1.5rem; display: flex; gap: 0.5rem;">
+                                <input type="text" id="live-scan-input"
+                                    placeholder="🔍 ENTER TARGET DOMAIN (e.g. scanme.nmap.org)"
                                     style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 1.2rem; border-radius: 8px; color: white; outline: none; transition: border 0.3s; font-size: 1rem;">
+                                <button onclick="runLiveScan()" id="scan-btn" class="btn-primary"
+                                    style="margin-top: 0; padding: 0 2rem;">RUN LIVE SCAN</button>
+                            </div>
+
+                            <div id="scan-terminal"
+                                style="background: rgba(0,0,0,0.5); padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; font-family: monospace; font-size: 0.8rem; color: #00ff88; height: 100px; overflow-y: auto; border: 1px solid rgba(0,255,136,0.2); display: none;">
+                                <div id="terminal-content"></div>
                             </div>
 
                             <div style="display: flex; gap: 1rem;">
                                 <button onclick="simulateAttack('SQL Injection')" class="btn-primary"
-                                    style="padding: 0.8rem 1.5rem; font-size: 0.8rem; flex: 1;">SIMULATE SQLi</button>
+                                    style="padding: 0.8rem 1.5rem; font-size: 0.8rem; flex: 1;">QUICK SQLi TEST</button>
                                 <button onclick="simulateAttack('DDoS Attack')" class="btn-primary"
-                                    style="padding: 0.8rem 1.5rem; font-size: 0.8rem; flex: 1;">SIMULATE DDoS</button>
-                                <button onclick="simulateAttack('Credential Stuffing')" class="btn-primary"
-                                    style="padding: 0.8rem 1.5rem; font-size: 0.8rem; flex: 1;">SIMULATE
-                                    BRUTEFORCE</button>
+                                    style="padding: 0.8rem 1.5rem; font-size: 0.8rem; flex: 1;">QUICK DDoS TEST</button>
                             </div>
                         </div>
 
                         <div
                             style="background: var(--panel-bg); border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 1rem;">
-                            <div style="font-size: 0.7rem; color: #666; margin-bottom: 1rem;">SECURITY SCORE</div>
-                            <div
-                                style="width: 120px; height: 120px; border-radius: 50%; border: 8px solid var(--success); display: flex; align-items: center; justify-content: center; font-family: monospace; font-size: 2.2rem; font-weight: 800; color: var(--success); box-shadow: 0 0 20px rgba(0,255,136,0.2);">
-                                98
+                            <div style="font-size: 0.7rem; color: #666; margin-bottom: 1rem;">SITE HEALTH SCORE</div>
+                            <div id="health-score-gauge"
+                                style="width: 120px; height: 120px; border-radius: 50%; border: 8px solid var(--success); display: flex; align-items: center; justify-content: center; font-family: monospace; font-size: 2.2rem; font-weight: 800; color: var(--success); box-shadow: 0 0 20px rgba(0,255,136,0.2); transition: all 1.5s cubic-bezier(0.4, 0, 0.2, 1);">
+                                100%
                             </div>
-                            <div style="font-size: 0.8rem; color: var(--success); margin-top: 1rem; font-weight: bold;">
+                            <div id="health-status-text"
+                                tyle="font-size: 0.8rem; color: var(--success); margin-top: 1rem; font-weight: bold;">
                                 OPTIMAL</div>
                         </div>
                     </div>
@@ -114,28 +101,81 @@
                     </div>
 
                     <div class="alert-feed" id="alert-feed">
-                        <h2>LIVE THREAT STREAM</h2>
+                        <h2>LIVE SCAN LOGS</h2>
                         <div class="alert-item Low" style="opacity: 0.5;">
                             <div class="alert-header">
                                 <span class="alert-type">System State</span>
-                                <span class="alert-severity">Normal</span>
+                                <span class="alert-severity">Ready</span>
                             </div>
-                            <div class="alert-details">Awaiting connection to AI Brain...</div>
+                            <div class="alert-details">Awaiting target domain for live vulnerability analysis...</div>
                         </div>
                     </div>
                 </div>
 
-                <div class="mitre-panel">
-                    <h2 style="font-size: 1rem; margin-bottom: 1.5rem;">STRATEGY ANALYSIS</h2>
+                <div class="mitre-panel" id="identity-panel">
+                    <h2 style="font-size: 1rem; margin-bottom: 1.5rem;">DEVELOPER IDENTITY</h2>
+                    <div style="text-align: center;">
+                        <div
+                            style="width: 80px; height: 80px; background: var(--secondary); border-radius: 50%; margin: 0 auto 1rem; display: flex; align-items: center; justify-content: center; font-size: 2rem; font-weight: 800; border: 2px solid var(--primary);">
+                            A</div>
+                        <h3 style="color: var(--primary);">Arnab Dev</h3>
+                        <p style="font-size: 0.8rem; color: #888; margin-bottom: 1.5rem;">Cybersecurity Researcher &
+                            Full-Stack Developer specializing in AI-driven threat intelligence and real-time
+                            security monitors.</p>
+
+                        <a href="https://github.com/arnabdevs" target="_blank" style="text-decoration: none;">
+                            <button class="btn-primary"
+                                style="width: 100%; font-size: 0.8rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+                                <svg height="16" width="16" viewBox="0 0 16 16" style="fill: currentColor;">
+                                    <path
+                                        d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z">
+                                    </path>
+                                </svg>
+                                FOLLOW ON GITHUB
+                            </button>
+                        </a>
+                    </div>
+
+                    <h2 style="font-size: 1rem; margin: 2rem 0 1rem;">SCAN STRATEGY</h2>
                     <div id="mitre-content">
-                        <p style="color: #666; font-size: 0.9rem;">Select a live threat to view the MITRE ATT&CK®
-                            technique and mitigation strategy.</p>
+                        <p style="color: #666; font-size: 0.9rem;">Run a live scan to generate a strategy analysis
+                            based on detected vulnerabilities.</p>
                     </div>
                 </div>
             </div>
 
-            <!-- Threat Activity View -->
-            <div id="threat-activity-view" class="view hidden">
+            <!-- Identity View (Full Screen Detailed Identity) -->
+            <div id="identity-view" class="view hidden">
+                <div class="content-area" style="grid-column: 1 / -1;">
+                    <div
+                        style="background: var(--panel-bg); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 3rem; text-align: center;">
+                        <h1 style="color: var(--primary); margin-bottom: 2rem;">ABOUT THE DEVELOPER</h1>
+                        <p style="max-width: 800px; margin: 0 auto 2rem; line-height: 1.8; color: #aaa;">
+                            I am dedicated to building the next generation of cybersecurity tools. SOC Velocity is a
+                            testament to the power of real-time monitoring and AI integration. This dashboard
+                            provides live vulnerability detection using industry-standard tools like Nmap, providing
+                            actionable intelligence directly to your browser.
+                        </p>
+                        <div style="display: flex; justify-content: center; gap: 2rem; margin-top: 3rem;">
+                            <div class="stat-card">
+                                <h3>Projects</h3>
+                                <p>15+</p>
+                            </div>
+                            <div class="stat-card">
+                                <h3>Vulnerabilities Found</h3>
+                                <p>500+</p>
+                            </div>
+                            <div class="stat-card">
+                                <h3>Systems Protected</h3>
+                                <p>1.2k</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Vulnerability Logs (Formerly Threat Activity) -->
+            <div id="vulnerability-logs-view" class="view hidden">
                 <div class="content-area" style="grid-column: 1 / -1;">
                     <div
                         style="background: var(--panel-bg); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 1.5rem; height: 100%;">
@@ -165,8 +205,8 @@
                 </div>
             </div>
 
-            <!-- Data Analytics View -->
-            <div id="data-analytics-view" class="view hidden">
+            <!-- Threat Hub (Formerly Data Analytics) -->
+            <div id="threat-hub-view" class="view hidden">
                 <div class="content-area">
                     <div
                         style="background: var(--panel-bg); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 1.5rem; flex: 1;">
@@ -197,14 +237,6 @@
                 </div>
             </div>
 
-            <!-- Settings View -->
-            <div id="data-analytics-view" class="view hidden">
-                <div
-                    style="padding: 2rem; background: var(--panel-bg); border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); grid-column: 1/-1;">
-                    <h2 style="color: var(--primary)">ENGINE SETTINGS</h2>
-                    <p style="margin-top: 1rem; color: #aaa">Configure detection thresholds and API integrations.</p>
-                </div>
-            </div>
         </main>
     </div>
     <script src="main.js"></script>

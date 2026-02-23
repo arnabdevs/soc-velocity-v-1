@@ -2,7 +2,7 @@
     --primary: #00f2ff;
     --secondary: #7000ff;
     --bg: #050505;
-    --panel-bg: rgba(20, 20, 20, 0.7);
+    --panel-bg: rgba(20, 20, 20, 0.85); /* Slightly more opaque for better readability */
     --text: #e0e0e0;
     --danger: #ff0055;
     --warning: #ffcc00;
@@ -264,6 +264,36 @@ main {
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 12px;
     padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+}
+
+#identity-panel .btn-primary {
+    transition: all 0.3s ease;
+    border: none;
+    cursor: pointer;
+    border-radius: 8px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+#identity-panel .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 242, 255, 0.4);
+}
+
+#scan-terminal {
+    scrollbar-width: thin;
+    scrollbar-color: var(--primary) transparent;
+}
+
+#scan-terminal::-webkit-scrollbar {
+    width: 4px;
+}
+
+#scan-terminal::-webkit-scrollbar-thumb {
+    background: var(--primary);
 }
 
 /* Custom Scrollbar */

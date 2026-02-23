@@ -24,16 +24,16 @@ async function checkBackend() {
         const response = await fetch(`${API_BASE}/api/health`);
         const data = await response.json();
         console.log("✅ Backend connection verified:", data);
-        
+
         document.getElementById('engine-status').textContent = "ACTIVE";
         document.getElementById('engine-status').style.color = "var(--success)";
-        
+
         const nmapEl = document.getElementById('nmap-status');
         if (nmapEl) {
             nmapEl.textContent = data.nmap_available ? "READY" : "MISSING";
             nmapEl.style.color = data.nmap_available ? "var(--success)" : "var(--danger)";
         }
-        
+
         const intelEl = document.getElementById('intel-status');
         if (intelEl) {
             intelEl.textContent = data.whois_available ? "READY" : "LIMITED";
@@ -213,6 +213,21 @@ window.runLiveScan = async function () {
 
         if (data.error) {
             log(`SCAN ERROR: ${data.error}`);
+            mitreContent.innerHTML = `
+                <div style="padding: 2rem; text-align: center; color: var(--danger); border: 1px dashed var(--danger); border-radius: 8px;">
+                    <div style="font-size: 2.5rem; margin-bottom: 1rem;">❌</div>
+                    <h3 style="margin-bottom: 0.5rem;">Vulnerability Scan Failed</h3>
+                    <p style="font-size: 0.8rem; color: #aaa; margin-bottom: 1rem;">Reason: ${data.error}</p>
+                    <div style="background: rgba(0,0,0,0.3); padding: 0.8rem; border-radius: 4px; text-align: left; font-size: 0.7rem; color: #ff8888; border: 1px solid rgba(255,0,0,0.2);">
+                        <strong>Suggested Fix:</strong>
+                        <ul style="margin-top: 0.4rem; padding-left: 1rem;">
+                            <li>Ensure the target domain is correct.</li>
+                            <li>The target might be blocking Nmap discovery scans.</li>
+                            <li>The backend is still updating with firewall-bypass (-Pn) support.</li>
+                        </ul>
+                    </div>
+                </div>
+            `;
         } else {
             log(`SCAN COMPLETE. DETECTED ${data.health_score}% HEALTH.`);
             log(`AUTOLOADING DETAILED INTELLIGENCE REPORT...`);

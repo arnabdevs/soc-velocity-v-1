@@ -24,11 +24,24 @@ async function checkBackend() {
         const response = await fetch(`${API_BASE}/api/health`);
         const data = await response.json();
         console.log("✅ Backend connection verified:", data);
+        
         document.getElementById('engine-status').textContent = "ACTIVE";
         document.getElementById('engine-status').style.color = "var(--success)";
+        
+        const nmapEl = document.getElementById('nmap-status');
+        if (nmapEl) {
+            nmapEl.textContent = data.nmap_available ? "READY" : "MISSING";
+            nmapEl.style.color = data.nmap_available ? "var(--success)" : "var(--danger)";
+        }
+        
+        const intelEl = document.getElementById('intel-status');
+        if (intelEl) {
+            intelEl.textContent = data.whois_available ? "READY" : "LIMITED";
+            intelEl.style.color = data.whois_available ? "var(--success)" : "var(--warning)";
+        }
     } catch (e) {
         console.error("❌ Backend unreachable:", e);
-        document.getElementById('engine-status').textContent = "OFFLINE (Start backend/app.py)";
+        document.getElementById('engine-status').textContent = "OFFLINE";
         document.getElementById('engine-status').style.color = "var(--danger)";
     }
 }

@@ -94,16 +94,19 @@ def run_real_scan():
         return jsonify({"error": "Invalid target"}), 400
         
     try:
-        # Run local nmap -F (Fast Scan)
-        print("DEBUG: Executing nmap...")
-        process = subprocess.Popen(['nmap', '-F', target], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        stdout, stderr = process.communicate(timeout=30)
+        # Run local nmap -Pn -F (-Pn skips ping check, essential for cloud/firewalls)
+        print(f"DEBUG: Executing nmap -Pn -F {target}...")
+        process = subprocess.Popen(['nmap', '-Pn', '-T4', '-F', target], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        stdout, stderr = process.communicate(timeout=60)
         
-        if process.returncode != 0:
+        # Even if returncode is non-zero (e.g. warnings), if we have stdout with "PORT", we can process it
+        if process.returncode != 0 and "PORT" not in stdout:
             print(f"DEBUG: nmap failed with code {process.returncode}. Error: {stderr}")
-            return jsonify({"error": "Scan failed", "details": stderr}), 500
-            
-        # Enhanced Parsing for "Proper" Results
+            return jsonify({"error": "Scan failed", "details": stderr, "raw": stdout}), 500
+        
+        if not stdout or "PORT" not in stdout:
+            print("DEBUG: No open ports found or Nmap output empty.")
+            # We don't error out here, just return a "Clean" result
         # Pattern: PORT/tcp STATE SERVICE
         matches = re.findall(r'(\d+)/tcp\s+(\w+)\s+(.+)', stdout)
         

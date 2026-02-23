@@ -2,7 +2,8 @@
     --primary: #00f2ff;
     --secondary: #7000ff;
     --bg: #050505;
-    --panel-bg: rgba(20, 20, 20, 0.85); /* Slightly more opaque for better readability */
+    --panel-bg: rgba(20, 20, 20, 0.85);
+    /* Slightly more opaque for better readability */
     --text: #e0e0e0;
     --danger: #ff0055;
     --warning: #ffcc00;
@@ -98,7 +99,9 @@ nav li.active {
 }
 
 main {
-    overflow: hidden;
+    overflow-y: auto;
+    padding-right: 5px;
+    /* Space for scrollbar */
 }
 
 .view {
@@ -129,7 +132,7 @@ main {
     display: flex;
     flex-direction: column;
     gap: 1rem;
-    overflow: hidden;
+    overflow-y: auto;
 }
 
 .stats-grid {
@@ -266,6 +269,8 @@ main {
     padding: 1.5rem;
     display: flex;
     flex-direction: column;
+    overflow-y: auto;
+    max-height: 100%;
 }
 
 #identity-panel .btn-primary {

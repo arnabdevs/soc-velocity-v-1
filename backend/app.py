@@ -73,19 +73,31 @@ def simulate_threat():
     simulated_threat_queue.append(alert)
     return jsonify({"status": "Simulation triggered", "alert": alert})
 
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    return jsonify({
+        "status": "healthy",
+        "engine": "AEGIS-LIVE-v1",
+        "whois_available": 'whois' in globals() or 'whois' in sys.modules,
+        "nmap_available": os.system('nmap --version') == 0
+    })
+
 @app.route('/api/scan', methods=['POST'])
 def run_real_scan():
     target = request.json.get('target', 'localhost')
+    print(f"DEBUG: Starting scan for {target}")
     
     if not target or len(target) > 255:
         return jsonify({"error": "Invalid target"}), 400
         
     try:
         # Run local nmap -F (Fast Scan)
+        print("DEBUG: Executing nmap...")
         process = subprocess.Popen(['nmap', '-F', target], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         stdout, stderr = process.communicate(timeout=30)
         
         if process.returncode != 0:
+            print(f"DEBUG: nmap failed with code {process.returncode}. Error: {stderr}")
             return jsonify({"error": "Scan failed", "details": stderr}), 500
             
         # Enhanced Parsing for "Proper" Results

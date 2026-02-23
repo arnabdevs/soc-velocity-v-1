@@ -4,11 +4,13 @@
 const alertFeed = document.getElementById('alert-feed');
 const mitreContent = document.getElementById('mitre-content');
 
-const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname === '';
 
 // Production API URL
 const PROD_API_BASE = 'https://defence-intelligence.onrender.com';
 let API_BASE = isLocal ? 'http://localhost:5000' : PROD_API_BASE;
+
+console.log(`🔗 CONNECTING TO API: ${API_BASE}`);
 
 function initDashboard() {
     console.log("🚀 Initializing AEGIS Mission Control...");
@@ -154,6 +156,7 @@ window.runLiveScan = async function () {
             log(`SCAN ERROR: ${data.error}`);
         } else {
             log(`SCAN COMPLETE. DETECTED ${data.health_score}% HEALTH.`);
+            log(`AUTOLOADING DETAILED INTELLIGENCE REPORT...`);
             updateHealthGauge(data.health_score);
             addAlertToFeed(data);
             showMitreDetails(data);

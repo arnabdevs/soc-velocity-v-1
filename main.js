@@ -7,7 +7,7 @@ const mitreContent = document.getElementById('mitre-content');
 const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname === '';
 
 // Production API URL
-const PROD_API_BASE = 'https://defence-intelligence.onrender.com';
+const PROD_API_BASE = 'https://soc-velocity-v-1-1.onrender.com';
 let API_BASE = isLocal ? 'http://localhost:5000' : PROD_API_BASE;
 
 console.log(`🔗 CONNECTING TO API: ${API_BASE}`);

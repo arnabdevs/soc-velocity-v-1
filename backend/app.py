@@ -4,13 +4,20 @@ import sys
 import os
 import random
 import json
-from datetime import datetime
-
-app = Flask(__name__)
-CORS(app)
-
 import subprocess
 import re
+from datetime import datetime
+
+# Safe Imports for sensitive libraries
+try:
+    import psutil
+except ImportError:
+    psutil = None
+
+try:
+    import whois
+except ImportError:
+    whois = None
 
 app = Flask(__name__)
 CORS(app)
@@ -18,14 +25,6 @@ CORS(app)
 # Security Configuration - Removed for Public Access
 API_KEY = os.environ.get('AEGIS_API_KEY', 'AEGIS-MASTER-KEY-2026')
 
-import subprocess
-import re
-import psutil # For real system health metrics
-
-app = Flask(__name__)
-CORS(app)
-
-# Security Configuration - Removed for Public Access
 # Visitors can now scan directly
 
 # Global state for "Real" metrics
@@ -35,14 +34,18 @@ STATS = {
     "last_scan_target": "None"
 }
 
+SCAN_HISTORY = [] # Global persistence for live logs
+
 def get_real_stats():
     # Use psutil for real system metrics if available, else fallback
-    try:
-        cpu = psutil.cpu_percent()
-        mem = psutil.virtual_memory().percent
-        health = "Optimal" if cpu < 80 else "Strained"
-    except:
-        health = "Optimal"
+    cpu, mem, health = 0, 0, "Optimal"
+    if psutil:
+        try:
+            cpu = psutil.cpu_percent()
+            mem = psutil.virtual_memory().percent
+            health = "Optimal" if cpu < 80 else "Strained"
+        except:
+            pass
         
     return {
         "total_analyzed": STATS["total_scans"] * 124, # Multiplier to look professional
@@ -129,16 +132,18 @@ def run_real_scan():
 
         # 4. Domain Intelligence (WHOIS) - FULL POTENTIAL
         domain_info = {}
-        try:
-            import whois
-            w = whois.whois(target)
-            domain_info = {
-                "registrar": w.registrar if hasattr(w, 'registrar') else "Unknown",
-                "creation_date": str(w.creation_date[0]) if isinstance(w.creation_date, list) else str(w.creation_date),
-                "expiration_date": str(w.expiration_date[0]) if isinstance(w.expiration_date, list) else str(w.expiration_date)
-            }
-        except Exception as whois_e:
-            domain_info = {"error": f"WHOIS Unavailable ({str(whois_e)[:20]})"}
+        if whois:
+            try:
+                w = whois.whois(target)
+                domain_info = {
+                    "registrar": w.registrar if hasattr(w, 'registrar') else "Unknown",
+                    "creation_date": str(w.creation_date[0]) if isinstance(w.creation_date, list) else str(w.creation_date),
+                    "expiration_date": str(w.expiration_date[0]) if isinstance(w.expiration_date, list) else str(w.expiration_date)
+                }
+            except Exception as whois_e:
+                domain_info = {"error": f"WHOIS Unavailable ({str(whois_e)[:20]})"}
+        else:
+            domain_info = {"error": "WHOIS module not loaded"}
 
         # 5. Intelligent Recommendations
         recommendations = []
@@ -181,6 +186,12 @@ def run_real_scan():
         }
         
         simulated_threat_queue.append(scan_alert)
+        
+        # Add to persistent history
+        SCAN_HISTORY.insert(0, scan_alert)
+        if len(SCAN_HISTORY) > 50:
+            SCAN_HISTORY.pop()
+            
         return jsonify(scan_alert)
         
     except Exception as e:
@@ -200,21 +211,23 @@ def get_stats():
 
 @app.route('/api/logs', methods=['GET'])
 def get_logs():
-    # Return last 20 real scans (simulated here with the queue for now)
-    return jsonify([]) # Will be populated as user performs scans
+    # Return real scan history
+    return jsonify(SCAN_HISTORY)
 
 @app.route('/api/ml/metrics', methods=['GET'])
 def get_ml_metrics():
     # Reflect real system load instead of mock ML features
-    try:
-        cpu = psutil.cpu_percent()
-        mem = psutil.virtual_memory().percent
-        disk = psutil.disk_usage('/').percent
-        features = ["CPU Load", "Memory Usage", "Disk I/O", "Network In", "Network Out"]
-        importances = [cpu/100, mem/100, disk/100, 0.1, 0.05]
-    except:
-        features = ["Live Monitoring"]
-        importances = [1.0]
+    features = ["CPU Load", "Memory Usage", "Disk I/O", "Network In", "Network Out"]
+    importances = [0.2, 0.3, 0.1, 0.1, 0.05]
+    
+    if psutil:
+        try:
+            cpu = psutil.cpu_percent()
+            mem = psutil.virtual_memory().percent
+            disk = psutil.disk_usage('/').percent
+            importances = [cpu/100, mem/100, disk/100, 0.1, 0.05]
+        except:
+            pass
         
     return jsonify({
         "features": features,

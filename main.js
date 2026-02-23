@@ -52,14 +52,19 @@ async function fetchStats() {
 
 async function fetchAlerts() {
     try {
-        const response = await fetch(`${API_BASE}/api/alerts/recent`);
-        const alerts = await response.json();
-        alerts.forEach(alert => {
-            addAlertToFeed(alert);
-        });
-    } catch (error) {
-        console.error('Error fetching alerts:', error);
-    }
+        // First try to get recent alerts (new results)
+        let response = await fetch(`${API_BASE}/api/alerts/recent`);
+        let alerts = await response.json();
+
+        // If no new alerts, populate with history to avoid empty dashboard
+        if (alerts.length === 0) {
+            const histResp = await fetch(`${API_BASE}/api/logs`);
+            const history = await histResp.json();
+            alerts = history.slice(0, 5); // Just show the latest 5 in the feed
+        }
+
+        alerts.forEach(alert => addAlertToFeed(alert));
+    } catch (e) { console.error("Error fetching alerts:", e); }
 }
 
 function addAlertToFeed(alert) {

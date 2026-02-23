@@ -92,6 +92,19 @@ function showMitreDetails(alert) {
         `;
     }
 
+    if (alert.domain_info && alert.domain_info.registrar) {
+        findingsHtml += `
+            <div style="margin-top: 1rem; padding: 1rem; background: rgba(112,0,255,0.05); border-radius: 8px; border: 1px solid rgba(112,0,255,0.2);">
+                <h4 style="color: var(--secondary); font-size: 0.8rem; margin-bottom: 0.5rem;">DOMAIN INTELLIGENCE</h4>
+                <div style="font-size: 0.75rem; color: #aaa; display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                    <div>Registrar: <span style="color: white;">${alert.domain_info.registrar}</span></div>
+                    <div>Created: <span style="color: white;">${alert.domain_info.creation_date.split(' ')[0]}</span></div>
+                    <div>Expires: <span style="color: white;">${alert.domain_info.expiration_date.split(' ')[0]}</span></div>
+                </div>
+            </div>
+        `;
+    }
+
     mitreContent.innerHTML = `
         <div style="background: rgba(0, 242, 255, 0.05); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--primary)">
             <h3 style="color: var(--primary); margin-bottom: 0.5rem">${alert.technique_name}</h3>

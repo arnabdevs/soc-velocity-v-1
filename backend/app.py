@@ -115,7 +115,20 @@ def run_real_scan():
         except Exception as web_e:
             web_issues.append(f"Web Analysis Unavailable ({str(web_e)[:30]})")
 
-        # 3. Final Health & Reporting
+        # 4. Domain Intelligence (WHOIS) - FULL POTENTIAL
+        domain_info = {}
+        try:
+            import whois
+            w = whois.whois(target)
+            domain_info = {
+                "registrar": w.registrar if hasattr(w, 'registrar') else "Unknown",
+                "creation_date": str(w.creation_date[0]) if isinstance(w.creation_date, list) else str(w.creation_date),
+                "expiration_date": str(w.expiration_date[0]) if isinstance(w.expiration_date, list) else str(w.expiration_date)
+            }
+        except Exception as whois_e:
+            domain_info = {"error": f"WHOIS Unavailable ({str(whois_e)[:20]})"}
+
+        # 5. Final Health & Reporting
         # -15 per open port, -5 per filtered port, -10 per web issue
         health_score = 100 - (len(open_ports) * 15) - (len(filtered_ports) * 5) - (len(web_issues) * 10)
         health_score = max(5, min(100, health_score))
@@ -129,14 +142,14 @@ def run_real_scan():
         if open_ports:
             detail_msg += f" Detected services: {', '.join(services[:3])}."
         if web_issues:
-            detail_msg += f" Found {len(web_issues)} web security gaps: {', '.join(web_issues[:3])}."
-        if not open_ports and not web_issues:
-            detail_msg += " No immediate threats detected via fast scan."
+            detail_msg += f" Found {len(web_issues)} web security gaps."
+        if domain_info.get('registrar'):
+            detail_msg += f" Registered via {domain_info['registrar']}."
             
         scan_alert = {
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "alert_id": "REAL-" + os.urandom(2).hex().upper(),
-            "type": "Vulnerability Analysis",
+            "type": "Security Assessment",
             "severity": "High" if health_score < 70 else "Medium" if health_score < 90 else "Low",
             "confidence": 99,
             "mitre_technique": "T1046",
@@ -146,7 +159,8 @@ def run_real_scan():
             "health_score": health_score,
             "raw_output": stdout,
             "detected_services": services,
-            "web_security_issues": web_issues
+            "web_security_issues": web_issues,
+            "domain_info": domain_info
         }
         
         simulated_threat_queue.append(scan_alert)

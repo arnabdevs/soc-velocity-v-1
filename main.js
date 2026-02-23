@@ -68,12 +68,42 @@ function addAlertToFeed(alert) {
 }
 
 function showMitreDetails(alert) {
+    let findingsHtml = '';
+
+    if (alert.web_security_issues && alert.web_security_issues.length > 0) {
+        findingsHtml += `
+            <div style="margin-top: 1rem;">
+                <h4 style="color: var(--warning); font-size: 0.8rem; margin-bottom: 0.5rem;">WEB SECURITY GAPS</h4>
+                <ul style="font-size: 0.8rem; padding-left: 1rem; color: #ccc;">
+                    ${alert.web_security_issues.map(issue => `<li>${issue}</li>`).join('')}
+                </ul>
+            </div>
+        `;
+    }
+
+    if (alert.detected_services && alert.detected_services.length > 0) {
+        findingsHtml += `
+            <div style="margin-top: 1rem;">
+                <h4 style="color: var(--primary); font-size: 0.8rem; margin-bottom: 0.5rem;">DETECTED SERVICES</h4>
+                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    ${alert.detected_services.map(s => `<span style="background: rgba(0,242,255,0.1); padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; border: 1px solid rgba(0,242,255,0.2);">${s}</span>`).join('')}
+                </div>
+            </div>
+        `;
+    }
+
     mitreContent.innerHTML = `
         <div style="background: rgba(0, 242, 255, 0.05); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--primary)">
             <h3 style="color: var(--primary); margin-bottom: 0.5rem">${alert.technique_name}</h3>
-            <p style="font-family: monospace; color: var(--secondary); margin-bottom: 1rem">${alert.mitre_technique}</p>
+            <p style="font-family: monospace; color: var(--secondary); margin-bottom: 1rem; font-size: 0.8rem;">${alert.mitre_technique || 'VULN-ANALYSIS'}</p>
             <p style="font-size: 0.9rem; line-height: 1.6">${alert.description}</p>
-            ${alert.raw_output ? `<pre style="background: #000; color: #0f8; padding: 0.5rem; border-radius: 4px; font-size: 0.7rem; overflow-x: auto; margin-top: 1rem; max-height: 200px;">${alert.raw_output}</pre>` : ''}
+            
+            ${findingsHtml}
+            
+            <div style="margin-top: 1.5rem;">
+                <h4 style="color: #666; font-size: 0.7rem; margin-bottom: 0.5rem;">RAW NMAP OUTPUT</h4>
+                <pre style="background: #000; color: #0f8; padding: 0.8rem; border-radius: 4px; font-size: 0.7rem; overflow-x: auto; max-height: 150px; border: 1px solid #333;">${alert.raw_output || 'No raw output available.'}</pre>
+            </div>
         </div>
     `;
 }

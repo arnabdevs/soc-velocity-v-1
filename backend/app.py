@@ -88,26 +88,65 @@ def run_real_scan():
         if process.returncode != 0:
             return jsonify({"error": "Scan failed", "details": stderr}), 500
             
-        open_ports = re.findall(r'(\d+)/tcp\s+open', stdout)
-        health_score = max(5, 100 - (len(open_ports) * 15))
+        # Enhanced Parsing for "Proper" Results
+        # Pattern: PORT/tcp STATE SERVICE
+        matches = re.findall(r'(\d+)/tcp\s+(\w+)\s+(.+)', stdout)
+        
+        open_ports = [m[0] for m in matches if m[1] == 'open']
+        filtered_ports = [m[0] for m in matches if m[1] == 'filtered']
+        services = [m[2].strip() for m in matches if m[1] == 'open']
+        
+        # 2. Lightweight Web Analysis (Real Output)
+        web_issues = []
+        try:
+            url = target if target.startswith('http') else f"https://{target}"
+            import requests
+            resp = requests.head(url, timeout=5, allow_redirects=True)
+            
+            # Check for Security Headers
+            headers = resp.headers
+            if 'Content-Security-Policy' not in headers:
+                web_issues.append("Missing CSP")
+            if 'Strict-Transport-Security' not in headers:
+                web_issues.append("Missing HSTS")
+            if 'X-Frame-Options' not in headers:
+                web_issues.append("Missing Clickjacking Protection")
+                
+        except Exception as web_e:
+            web_issues.append(f"Web Analysis Unavailable ({str(web_e)[:30]})")
+
+        # 3. Final Health & Reporting
+        # -15 per open port, -5 per filtered port, -10 per web issue
+        health_score = 100 - (len(open_ports) * 15) - (len(filtered_ports) * 5) - (len(web_issues) * 10)
+        health_score = max(5, min(100, health_score))
         
         # Update Real Stats
         STATS["total_scans"] += 1
-        STATS["vulnerabilities_found"] += len(open_ports)
+        STATS["vulnerabilities_found"] += len(open_ports) + len([w for w in web_issues if "Missing" in w])
         STATS["last_scan_target"] = target
         
+        detail_msg = f"Intelligence report for {target}:"
+        if open_ports:
+            detail_msg += f" Detected services: {', '.join(services[:3])}."
+        if web_issues:
+            detail_msg += f" Found {len(web_issues)} web security gaps: {', '.join(web_issues[:3])}."
+        if not open_ports and not web_issues:
+            detail_msg += " No immediate threats detected via fast scan."
+            
         scan_alert = {
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "alert_id": "SCAN-" + os.urandom(2).hex().upper(),
-            "type": "Vulnerability Scan",
-            "severity": "High" if len(open_ports) > 2 else "Medium" if open_ports else "Low",
+            "alert_id": "REAL-" + os.urandom(2).hex().upper(),
+            "type": "Vulnerability Analysis",
+            "severity": "High" if health_score < 70 else "Medium" if health_score < 90 else "Low",
             "confidence": 99,
             "mitre_technique": "T1046",
             "technique_name": "Network Service Scanning",
-            "description": f"Real-time scan of {target} finished. Detected {len(open_ports)} open ports.",
+            "description": detail_msg,
             "target_site": target,
             "health_score": health_score,
-            "raw_output": stdout
+            "raw_output": stdout,
+            "detected_services": services,
+            "web_security_issues": web_issues
         }
         
         simulated_threat_queue.append(scan_alert)

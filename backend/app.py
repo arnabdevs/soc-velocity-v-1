@@ -19,6 +19,7 @@ from ai_engine import ThreatDetector, detect_malware
 from breach_engine import BreachEngine, simulate_real_time_attacks
 from mailer import send_alert_email
 from intel_sync import IntelSync
+from ddos_guard import DDoSGuard
 
 app = Flask(__name__)
 CORS(app)
@@ -47,16 +48,24 @@ with app.app_context():
 threat_detector = ThreatDetector()
 breach_engine = BreachEngine()
 
-# --- Middleware: AI Request Inspector ---
+# --- Middleware: AI Request Inspector + DDoS Guard ---
 @app.before_request
 def inspect_traffic():
-    # 1. IP Blacklist Check
     client_ip = request.remote_addr
+
+    # 0. AEGIS DDoS Guard: Burst + Rate check (first, fastest)
+    is_blocked, reason, retry_after = DDoSGuard.check(client_ip)
+    if is_blocked:
+        resp = jsonify({"error": "DDoS Protection", "message": reason, "retry_after": retry_after})
+        resp.headers['Retry-After'] = str(retry_after)
+        resp.headers['X-AEGIS-Block'] = 'DDoS-Guard'
+        return resp, 429
+
+    # 1. IP Blacklist Check (AbuseIPDB synced)
     if IPBlacklist.query.filter_by(ip_address=client_ip).first():
         return jsonify({"error": "Access Denied", "message": "Your IP has been blacklisted for security reasons."}), 403
 
-    # 2. AI Threat Analysis
-    # Exempt auth routes from strict inspection for now to allow passwords
+    # 2. AI Threat Analysis (exempt auth routes)
     if request.path.startswith('/api/auth'):
         return
 
@@ -64,14 +73,14 @@ def inspect_traffic():
     if payload:
         score, details = threat_detector.analyze_request(payload)
         if score > 0.8:
-            # AEGIS Adaptive Learning: Auto-Blacklist high-severity IPs
+            # Adaptive Learning: Auto-blacklist ultra-high-severity IPs
             if score > 0.95:
                 if not IPBlacklist.query.filter_by(ip_address=client_ip).first():
-                    entry = IPBlacklist(ip_address=client_ip, reason=f"AI Auto-Block: Continuous {details[0]}")
+                    entry = IPBlacklist(ip_address=client_ip, reason=f"AI Auto-Block: {details[0]}")
                     db.session.add(entry)
                     db.session.commit()
 
-            # Prevent "Hacking someone from my website" - User's request
+            # Block the request
             return jsonify({
                 "error": "Security Block",
                 "message": "AI Engine detected malicious patterns in your request.",
@@ -268,11 +277,15 @@ def get_stats():
 
 @app.route('/api/logs/live', methods=['GET'])
 def get_live_attacks():
-    # Return simulated real-time attack attempts for a random target
-    # In a real app, this would query a real monitoring log
     mock_target = "global-defense.net"
     attack = simulate_real_time_attacks(mock_target)
     return jsonify([attack] if attack else [])
+
+@app.route('/api/ddos-stats', methods=['GET'])
+def get_ddos_stats():
+    """Returns live DDoS protection statistics."""
+    stats = DDoSGuard.stats()
+    return jsonify(stats)
 
 @app.route('/api/admin/blacklist', methods=['POST'])
 @jwt_required()

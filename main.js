@@ -1,7 +1,7 @@
 // AEGIS SOC Engine - aegis-soc-engine - Protected by AI 🛡️
 
 const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname === '';
-const API_BASE = isLocal ? 'http://localhost:5000' : 'https://soc-velocity-v-1-1.onrender.com';
+const API_BASE = isLocal ? 'http://localhost:5000' : 'https://defence-intelligence.onrender.com';
 
 let AUTH_TOKEN = localStorage.getItem('AEGIS_TOKEN') || null;
 
@@ -88,7 +88,7 @@ function updateUserStatus() {
 // --- View Switching ---
 window.switchView = (viewName) => {
     document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
-    document.getElementById(`${viewName} - view`).classList.remove('hidden');
+    document.getElementById(`${viewName}-view`).classList.remove('hidden');
 
     document.querySelectorAll('nav li').forEach(li => {
         li.classList.toggle('active', li.textContent.toLowerCase().includes(viewName.replace('-', ' ')));
@@ -275,6 +275,33 @@ function initCharts() {
                 }]
             },
             options: { plugins: { legend: { position: 'bottom', labels: { color: '#666', font: { size: 10 } } } } }
+        });
+    }
+
+    const ctx2 = document.getElementById('accuracy-chart');
+    if (ctx2) {
+        new Chart(ctx2, {
+            type: 'line',
+            data: {
+                labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                datasets: [{
+                    label: 'Model Accuracy %',
+                    data: [91, 93, 92, 95, 94, 97, 96],
+                    borderColor: '#00f2ff',
+                    backgroundColor: 'rgba(0,242,255,0.05)',
+                    borderWidth: 2,
+                    pointBackgroundColor: '#00f2ff',
+                    tension: 0.4,
+                    fill: true
+                }]
+            },
+            options: {
+                plugins: { legend: { labels: { color: '#666', font: { size: 10 } } } },
+                scales: {
+                    x: { ticks: { color: '#555' }, grid: { color: 'rgba(255,255,255,0.03)' } },
+                    y: { ticks: { color: '#555' }, grid: { color: 'rgba(255,255,255,0.03)' }, min: 85, max: 100 }
+                }
+            }
         });
     }
 }

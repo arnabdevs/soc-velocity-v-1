@@ -158,15 +158,21 @@ function showScanDetails(data) {
     const content = document.getElementById('result-content');
     details.classList.remove('hidden');
 
+    const sslColor = data.ssl_grade?.startsWith('A') ? 'var(--success)' : data.ssl_grade === 'N/A' ? '#888' : 'var(--danger)';
+    const urlscan = data.urlscan || {};
+
     content.innerHTML = `
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
             <div>
-                <p><strong>Open Ports:</strong> ${data.open_ports.join(', ') || 'None'}</p>
-                <p><strong>Detected Services:</strong> ${data.services.join(', ') || 'None'}</p>
+                <p><strong>Open Ports:</strong> ${data.open_ports?.join(', ') || 'None Detected'}</p>
+                <p><strong>Detected Services:</strong> ${data.services?.join(', ') || 'None'}</p>
+                <p><strong>SSL Grade:</strong> <span style="color: ${sslColor}; font-size: 1.2rem; font-weight: bold;">${data.ssl_grade || 'N/A'}</span></p>
+                ${urlscan.ip ? `<p><strong>Server IP:</strong> ${urlscan.ip} (${urlscan.country || 'Unknown'})</p>` : ''}
+                ${urlscan.server ? `<p><strong>Web Server:</strong> ${urlscan.server}</p>` : ''}
             </div>
             <div>
-                <p><strong>Malware Findings:</strong> <span style="color: ${data.malware_findings.length ? 'var(--danger)' : 'var(--success)'}">${data.malware_findings.length || '0 Clean Indicators'}</span></p>
-                <ul style="font-size: 0.7rem;">${data.malware_findings.map(f => `<li>${f}</li>`).join('')}</ul>
+                <p><strong>Security Findings:</strong> <span style="color: ${data.malware_findings?.length ? 'var(--danger)' : 'var(--success)'}">${data.malware_findings?.length ? data.malware_findings.length + ' Issues Found' : 'Clean ✅'}</span></p>
+                <ul style="font-size: 0.7rem; margin-top: 0.5rem;">${(data.malware_findings || []).map(f => `<li style="margin-bottom: 4px; color: #f88;">${f}</li>`).join('')}</ul>
             </div>
         </div>
         `;

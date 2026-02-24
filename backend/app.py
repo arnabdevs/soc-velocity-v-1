@@ -116,58 +116,116 @@ def run_real_scan():
     if not target or len(target) > 255:
         return jsonify({"error": "Invalid target"}), 400
     
+    # Strip protocol for clean domain
+    domain = target.replace("https://", "").replace("http://", "").split("/")[0]
+
     # Block private IP ranges
     try:
-        if re.match(r'^\d{1,3}(\.\d{1,3}){3}$', target):
-            ip = ipaddress.ip_address(target)
+        if re.match(r'^\d{1,3}(\.\d{1,3}){3}$', domain):
+            ip = ipaddress.ip_address(domain)
             if ip.is_private or ip.is_loopback:
                 return jsonify({"error": "Scanning internal/private networks is prohibited"}), 403
     except: pass
 
-    # AI Malware Detection Simulation on the target (faking a lightweight fetch)
+    open_ports = []
+    services = []
     malware_findings = []
+    ssl_grade = "N/A"
+    urlscan_data = {}
+
+    # === REAL API 1: URLScan.io (Free, No Key needed) ===
     try:
-        import requests
-        url = target if target.startswith('http') else f"http://{target}"
-        resp = requests.get(url, timeout=5, stream=True)
-        content_sample = resp.raw.read(10000) # Read first 10kb
-        malware_findings = detect_malware(content_sample)
-    except:
-        malware_findings = ["Unable to reach site for deep malware analysis"]
-
-    # Nmap Scan Logic
-    try:
-        process = subprocess.Popen(['nmap', '-Pn', '-T4', '-F', target], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        stdout, stderr = process.communicate(timeout=60)
-        
-        matches = re.findall(r'(\d+)/tcp\s+(\w+)\s+(.+)', stdout)
-        open_ports = [m[0] for m in matches if 'open' in m[1]]
-        services = [m[2].strip() for m in matches if 'open' in m[1]]
-        
-        health_score = 100 - (len(open_ports) * 10) - (len(malware_findings) * 20)
-        health_score = max(5, min(100, health_score))
-
-        scan_alert = {
-            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "alert_id": "AEGIS-" + os.urandom(2).hex().upper(),
-            "target": target,
-            "health_score": health_score,
-            "open_ports": open_ports,
-            "services": services,
-            "malware_findings": malware_findings,
-            "status": "Optimal" if health_score > 80 else "Vulnerable" if health_score > 50 else "Critical"
-        }
-
-        # Persist if logged in
-        if user_id:
-            entry = WebsiteEntry(url=target, user_id=user_id, health_score=health_score, 
-                                 status=scan_alert['status'], malware_detected=bool(malware_findings))
-            db.session.add(entry)
-            db.session.commit()
-
-        return jsonify(scan_alert)
+        urlscan_resp = requests.get(
+            f"https://urlscan.io/api/v1/search/?q=domain:{domain}&size=1",
+            timeout=8
+        )
+        if urlscan_resp.status_code == 200:
+            results = urlscan_resp.json().get("results", [])
+            if results:
+                latest = results[0]
+                page = latest.get("page", {})
+                verdicts = latest.get("verdicts", {})
+                urlscan_data = {
+                    "ip": page.get("ip", "Unknown"),
+                    "country": page.get("country", "Unknown"),
+                    "server": page.get("server", "Unknown"),
+                    "malicious": verdicts.get("overall", {}).get("malicious", False),
+                    "screenshot": latest.get("screenshot", "")
+                }
+                if urlscan_data["malicious"]:
+                    malware_findings.append("URLScan.io: Site flagged as MALICIOUS")
+                if page.get("server"):
+                    services.append(page["server"])
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        print(f"URLScan error: {e}")
+
+    # === REAL API 2: SSL Labs (Free, No Key needed) ===
+    try:
+        ssl_resp = requests.get(
+            f"https://api.ssllabs.com/api/v3/analyze?host={domain}&publish=off&all=done",
+            timeout=10
+        )
+        if ssl_resp.status_code == 200:
+            ssl_data = ssl_resp.json()
+            endpoints = ssl_data.get("endpoints", [])
+            if endpoints:
+                ssl_grade = endpoints[0].get("grade", "N/A")
+                if ssl_grade in ["C", "D", "E", "F", "T"]:
+                    malware_findings.append(f"Weak SSL Security - Grade: {ssl_grade}")
+                    open_ports.append("443 (Weak SSL)")
+                elif ssl_grade in ["A", "A+"]:
+                    services.append(f"HTTPS ({ssl_grade} rated)")
+    except Exception as e:
+        print(f"SSL Labs error: {e}")
+
+    # === REAL API 3: Basic HTTP Check + Malware Scan ===
+    try:
+        url = f"https://{domain}" if not target.startswith('http') else target
+        resp = requests.get(url, timeout=5, stream=True)
+        content_sample = resp.raw.read(10000)
+        malware_findings += detect_malware(content_sample)
+        
+        # Check common security headers
+        headers = resp.headers
+        if not headers.get("X-Frame-Options"):
+            malware_findings.append("Missing X-Frame-Options header (Clickjacking risk)")
+        if not headers.get("Content-Security-Policy"):
+            malware_findings.append("Missing Content-Security-Policy header")
+        if not headers.get("Strict-Transport-Security"):
+            malware_findings.append("Missing HSTS header")
+
+        open_ports.append("80 (HTTP)")
+        if "https" in url:
+            open_ports.append("443 (HTTPS)")
+    except:
+        pass
+
+    # Compute Health Score from real data
+    ssl_penalty = 0 if ssl_grade in ["A+", "A", "B", "N/A"] else 30
+    health_score = 100 - (len(malware_findings) * 15) - ssl_penalty
+    health_score = max(5, min(100, health_score))
+
+    scan_alert = {
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "alert_id": "AEGIS-" + os.urandom(2).hex().upper(),
+        "target": domain,
+        "health_score": health_score,
+        "open_ports": list(set(open_ports)),
+        "services": list(set(services)),
+        "malware_findings": list(set(malware_findings)),
+        "ssl_grade": ssl_grade,
+        "urlscan": urlscan_data,
+        "status": "Optimal" if health_score > 80 else "Vulnerable" if health_score > 50 else "Critical"
+    }
+
+    # Persist if logged in
+    if user_id:
+        entry = WebsiteEntry(url=domain, user_id=user_id, health_score=health_score,
+                             status=scan_alert['status'], malware_detected=bool(malware_findings))
+        db.session.add(entry)
+        db.session.commit()
+
+    return jsonify(scan_alert)
 
 @app.route('/api/breach-check', methods=['POST'])
 @jwt_required(optional=True)

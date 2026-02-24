@@ -8,6 +8,8 @@ import subprocess
 import re
 import ipaddress
 import requests
+import base64
+import socket
 from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
@@ -42,19 +44,21 @@ limiter = Limiter(
 
 with app.app_context():
     db.create_all()
-    # AEGIS Pro: Trigger First Global Intelligence Sync
     IntelSync.sync_abuse_ipdb()
 
 # Engines
 threat_detector = ThreatDetector()
 breach_engine = BreachEngine()
 
+# Optional API keys (from environment)
+VIRUSTOTAL_KEY = os.environ.get('VIRUSTOTAL_API_KEY', '')
+ABUSEIPDB_KEY = os.environ.get('ABUSEIPDB_API_KEY', '')
+
 # --- Middleware: AI Request Inspector + DDoS Guard ---
 @app.before_request
 def inspect_traffic():
     client_ip = request.remote_addr
 
-    # 0. AEGIS DDoS Guard: Burst + Rate check (first, fastest)
     is_blocked, reason, retry_after = DDoSGuard.check(client_ip)
     if is_blocked:
         resp = jsonify({"error": "DDoS Protection", "message": reason, "retry_after": retry_after})
@@ -62,11 +66,9 @@ def inspect_traffic():
         resp.headers['X-AEGIS-Block'] = 'DDoS-Guard'
         return resp, 429
 
-    # 1. IP Blacklist Check (AbuseIPDB synced)
     if IPBlacklist.query.filter_by(ip_address=client_ip).first():
         return jsonify({"error": "Access Denied", "message": "Your IP has been blacklisted for security reasons."}), 403
 
-    # 2. AI Threat Analysis (exempt auth routes)
     if request.path.startswith('/api/auth'):
         return
 
@@ -74,14 +76,11 @@ def inspect_traffic():
     if payload:
         score, details = threat_detector.analyze_request(payload)
         if score > 0.8:
-            # Adaptive Learning: Auto-blacklist ultra-high-severity IPs
             if score > 0.95:
                 if not IPBlacklist.query.filter_by(ip_address=client_ip).first():
                     entry = IPBlacklist(ip_address=client_ip, reason=f"AI Auto-Block: {details[0]}")
                     db.session.add(entry)
                     db.session.commit()
-
-            # Block the request
             return jsonify({
                 "error": "Security Block",
                 "message": "AI Engine detected malicious patterns in your request.",
@@ -89,16 +88,189 @@ def inspect_traffic():
                 "score": score
             }), 403
 
-# --- Routes: Authentication ---
+# ─────────────────────────────────────────────
+# INTELLIGENCE ENGINE HELPERS
+# ─────────────────────────────────────────────
+
+def get_ip_intel(domain):
+    """ip-api.com: IP geolocation, ASN, ISP, VPN/Proxy/Tor detection"""
+    try:
+        resp = requests.get(
+            f"http://ip-api.com/json/{domain}?fields=status,country,countryCode,regionName,city,isp,org,as,proxy,hosting,query",
+            timeout=5
+        )
+        if resp.status_code == 200:
+            d = resp.json()
+            if d.get("status") == "success":
+                return {
+                    "ip": d.get("query", "Unknown"),
+                    "country": d.get("country", "Unknown"),
+                    "country_code": d.get("countryCode", ""),
+                    "region": d.get("regionName", "Unknown"),
+                    "city": d.get("city", "Unknown"),
+                    "isp": d.get("isp", "Unknown"),
+                    "org": d.get("org", "Unknown"),
+                    "asn": d.get("as", "Unknown"),
+                    "is_proxy": d.get("proxy", False),
+                    "is_hosting": d.get("hosting", False)
+                }
+    except Exception as e:
+        print(f"ip-api error: {e}")
+    return {}
+
+def get_dns_records(domain):
+    """HackerTarget: A, MX, NS, TXT records"""
+    records = {"A": [], "MX": [], "NS": [], "TXT": []}
+    try:
+        for rec_type in ["hostsearch", "dnslookup"]:
+            resp = requests.get(
+                f"https://api.hackertarget.com/dnslookup/?q={domain}",
+                timeout=6
+            )
+            if resp.status_code == 200 and "error" not in resp.text.lower():
+                for line in resp.text.strip().split("\n"):
+                    parts = line.split()
+                    if len(parts) >= 4:
+                        rtype = parts[3]
+                        rvalue = " ".join(parts[4:]) if len(parts) > 4 else ""
+                        if rtype in records:
+                            records[rtype].append(rvalue)
+            break
+    except Exception as e:
+        print(f"HackerTarget DNS error: {e}")
+    return records
+
+def get_subdomains(domain):
+    """crt.sh: Subdomain enumeration via certificate transparency logs"""
+    try:
+        resp = requests.get(
+            f"https://crt.sh/?q=%.{domain}&output=json",
+            timeout=8,
+            headers={"Accept": "application/json"}
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            subs = set()
+            for entry in data[:50]:
+                name = entry.get("name_value", "")
+                for sub in name.split("\n"):
+                    sub = sub.strip().lstrip("*.")
+                    if sub and domain in sub and sub != domain:
+                        subs.add(sub)
+            return sorted(list(subs))[:20]
+    except Exception as e:
+        print(f"crt.sh error: {e}")
+    return []
+
+def get_whois(domain):
+    """RDAP: Domain registration, registrar, dates"""
+    try:
+        resp = requests.get(
+            f"https://rdap.verisign.com/com/v1/domain/{domain}",
+            timeout=6
+        )
+        if resp.status_code == 200:
+            d = resp.json()
+            events = {e["eventAction"]: e["eventDate"] for e in d.get("events", [])}
+            entities = d.get("entities", [])
+            registrar = ""
+            for ent in entities:
+                roles = ent.get("roles", [])
+                if "registrar" in roles:
+                    vcard = ent.get("vcardArray", [])
+                    if vcard and len(vcard) > 1:
+                        for item in vcard[1]:
+                            if item[0] == "fn":
+                                registrar = item[3]
+                                break
+            return {
+                "registrar": registrar or "Unknown",
+                "created": events.get("registration", "Unknown")[:10] if events.get("registration") else "Unknown",
+                "expires": events.get("expiration", "Unknown")[:10] if events.get("expiration") else "Unknown",
+                "updated": events.get("last changed", "Unknown")[:10] if events.get("last changed") else "Unknown",
+                "status": d.get("status", [])
+            }
+    except Exception as e:
+        print(f"RDAP error: {e}")
+    # Fallback for non-.com
+    try:
+        resp = requests.get(
+            f"https://rdap.org/domain/{domain}",
+            timeout=6
+        )
+        if resp.status_code == 200:
+            d = resp.json()
+            events = {e["eventAction"]: e["eventDate"] for e in d.get("events", [])}
+            return {
+                "registrar": "See registrar",
+                "created": events.get("registration", "Unknown")[:10] if events.get("registration") else "Unknown",
+                "expires": events.get("expiration", "Unknown")[:10] if events.get("expiration") else "Unknown",
+                "updated": "Unknown",
+                "status": d.get("status", [])
+            }
+    except:
+        pass
+    return {}
+
+def get_virustotal(domain):
+    """VirusTotal: URL reputation scan (requires API key)"""
+    if not VIRUSTOTAL_KEY:
+        return None
+    try:
+        url_id = base64.urlsafe_b64encode(f"https://{domain}".encode()).decode().strip("=")
+        resp = requests.get(
+            f"https://www.virustotal.com/api/v3/urls/{url_id}",
+            headers={"x-apikey": VIRUSTOTAL_KEY},
+            timeout=8
+        )
+        if resp.status_code == 200:
+            stats = resp.json().get("data", {}).get("attributes", {}).get("last_analysis_stats", {})
+            return {
+                "malicious": stats.get("malicious", 0),
+                "suspicious": stats.get("suspicious", 0),
+                "harmless": stats.get("harmless", 0),
+                "undetected": stats.get("undetected", 0),
+                "total": sum(stats.values())
+            }
+    except Exception as e:
+        print(f"VirusTotal error: {e}")
+    return None
+
+def get_abuseipdb(ip):
+    """AbuseIPDB: IP abuse confidence score (requires API key)"""
+    if not ABUSEIPDB_KEY or not ip:
+        return None
+    try:
+        resp = requests.get(
+            "https://api.abuseipdb.com/api/v2/check",
+            headers={"Key": ABUSEIPDB_KEY, "Accept": "application/json"},
+            params={"ipAddress": ip, "maxAgeInDays": 90},
+            timeout=6
+        )
+        if resp.status_code == 200:
+            d = resp.json().get("data", {})
+            return {
+                "abuse_score": d.get("abuseConfidenceScore", 0),
+                "total_reports": d.get("totalReports", 0),
+                "country": d.get("countryCode", ""),
+                "isp": d.get("isp", ""),
+                "usage_type": d.get("usageType", "")
+            }
+    except Exception as e:
+        print(f"AbuseIPDB error: {e}")
+    return None
+
+# ─────────────────────────────────────────────
+# ROUTES: Authentication
+# ─────────────────────────────────────────────
+
 @app.route('/api/auth/signup', methods=['POST'])
 def signup():
     data = request.json
     if not data or not data.get('email') or not data.get('password'):
         return jsonify({"error": "Missing email or password"}), 400
-    
     if User.query.filter_by(email=data['email']).first():
         return jsonify({"error": "User already exists"}), 409
-        
     user = User(email=data['email'])
     user.set_password(data['password'])
     db.session.add(user)
@@ -111,39 +283,39 @@ def login():
     user = User.query.filter_by(email=data.get('email')).first()
     if not user or not user.check_password(data.get('password')):
         return jsonify({"error": "Invalid credentials"}), 401
-        
     access_token = create_access_token(identity=user.id)
     return jsonify(access_token=access_token), 200
 
-# --- Routes: Security Core ---
+# ─────────────────────────────────────────────
+# ROUTES: Security Core (Cloudflare-Level Scan)
+# ─────────────────────────────────────────────
+
 @app.route('/api/scan', methods=['POST'])
 @jwt_required(optional=True)
 def run_real_scan():
     user_id = get_jwt_identity()
     target = request.json.get('target', '').strip()
-    
-    # Validation & SSRF Protection
+
     if not target or len(target) > 255:
         return jsonify({"error": "Invalid target"}), 400
-    
-    # Strip protocol for clean domain
+
     domain = target.replace("https://", "").replace("http://", "").split("/")[0]
 
-    # Block private IP ranges
     try:
         if re.match(r'^\d{1,3}(\.\d{1,3}){3}$', domain):
             ip = ipaddress.ip_address(domain)
             if ip.is_private or ip.is_loopback:
                 return jsonify({"error": "Scanning internal/private networks is prohibited"}), 403
-    except: pass
+    except:
+        pass
 
+    malware_findings = []
     open_ports = []
     services = []
-    malware_findings = []
     ssl_grade = "N/A"
     urlscan_data = {}
 
-    # === REAL API 1: URLScan.io (Free, No Key needed) ===
+    # === ENGINE 1: URLScan.io ===
     try:
         urlscan_resp = requests.get(
             f"https://urlscan.io/api/v1/search/?q=domain:{domain}&size=1",
@@ -156,9 +328,9 @@ def run_real_scan():
                 page = latest.get("page", {})
                 verdicts = latest.get("verdicts", {})
                 urlscan_data = {
-                    "ip": page.get("ip", "Unknown"),
-                    "country": page.get("country", "Unknown"),
-                    "server": page.get("server", "Unknown"),
+                    "ip": page.get("ip", ""),
+                    "country": page.get("country", ""),
+                    "server": page.get("server", ""),
                     "malicious": verdicts.get("overall", {}).get("malicious", False),
                     "screenshot": latest.get("screenshot", "")
                 }
@@ -169,7 +341,7 @@ def run_real_scan():
     except Exception as e:
         print(f"URLScan error: {e}")
 
-    # === REAL API 2: SSL Labs (Free, No Key needed) ===
+    # === ENGINE 2: SSL Labs ===
     try:
         ssl_resp = requests.get(
             f"https://api.ssllabs.com/api/v3/analyze?host={domain}&publish=off&all=done",
@@ -188,31 +360,58 @@ def run_real_scan():
     except Exception as e:
         print(f"SSL Labs error: {e}")
 
-    # === REAL API 3: Basic HTTP Check + Malware Scan ===
+    # === ENGINE 3: HTTP Security Header Audit ===
     try:
         url = f"https://{domain}" if not target.startswith('http') else target
         resp = requests.get(url, timeout=5, stream=True)
         content_sample = resp.raw.read(10000)
         malware_findings += detect_malware(content_sample)
-        
-        # Check common security headers
         headers = resp.headers
         if not headers.get("X-Frame-Options"):
-            malware_findings.append("Missing X-Frame-Options header (Clickjacking risk)")
+            malware_findings.append("Missing X-Frame-Options (Clickjacking risk)")
         if not headers.get("Content-Security-Policy"):
             malware_findings.append("Missing Content-Security-Policy header")
         if not headers.get("Strict-Transport-Security"):
             malware_findings.append("Missing HSTS header")
-
+        if not headers.get("X-Content-Type-Options"):
+            malware_findings.append("Missing X-Content-Type-Options header")
+        if not headers.get("Referrer-Policy"):
+            malware_findings.append("Missing Referrer-Policy header")
         open_ports.append("80 (HTTP)")
         if "https" in url:
             open_ports.append("443 (HTTPS)")
     except:
         pass
 
-    # Compute Health Score from real data
+    # === ENGINE 4: IP Intelligence (ip-api.com) ===
+    ip_intel = get_ip_intel(domain)
+    if ip_intel.get("is_proxy"):
+        malware_findings.append("IP flagged as Proxy/VPN/Tor exit node")
+
+    # === ENGINE 5: DNS Records (HackerTarget) ===
+    dns_records = get_dns_records(domain)
+
+    # === ENGINE 6: Subdomain Enumeration (crt.sh) ===
+    subdomains = get_subdomains(domain)
+
+    # === ENGINE 7: WHOIS/RDAP ===
+    whois_data = get_whois(domain)
+
+    # === ENGINE 8: VirusTotal (optional) ===
+    virustotal = get_virustotal(domain)
+    if virustotal and virustotal.get("malicious", 0) > 0:
+        malware_findings.append(f"VirusTotal: {virustotal['malicious']} vendors flagged site as malicious")
+
+    # === ENGINE 9: AbuseIPDB (optional) ===
+    server_ip = ip_intel.get("ip", urlscan_data.get("ip", ""))
+    abuseipdb = get_abuseipdb(server_ip)
+    if abuseipdb and abuseipdb.get("abuse_score", 0) > 25:
+        malware_findings.append(f"AbuseIPDB: Server IP has {abuseipdb['abuse_score']}% abuse confidence score")
+
+    # Compute Health Score
     ssl_penalty = 0 if ssl_grade in ["A+", "A", "B", "N/A"] else 30
-    health_score = 100 - (len(malware_findings) * 15) - ssl_penalty
+    vt_penalty = min(virustotal.get("malicious", 0) * 10, 40) if virustotal else 0
+    health_score = 100 - (len(malware_findings) * 10) - ssl_penalty - vt_penalty
     health_score = max(5, min(100, health_score))
 
     scan_alert = {
@@ -225,10 +424,16 @@ def run_real_scan():
         "malware_findings": list(set(malware_findings)),
         "ssl_grade": ssl_grade,
         "urlscan": urlscan_data,
+        # Cloudflare-level intelligence
+        "ip_intel": ip_intel,
+        "dns_records": dns_records,
+        "subdomains": subdomains,
+        "whois": whois_data,
+        "virustotal": virustotal,
+        "abuseipdb": abuseipdb,
         "status": "Optimal" if health_score > 80 else "Vulnerable" if health_score > 50 else "Critical"
     }
 
-    # Persist if logged in
     if user_id:
         entry = WebsiteEntry(url=domain, user_id=user_id, health_score=health_score,
                              status=scan_alert['status'], malware_detected=bool(malware_findings))
@@ -237,6 +442,10 @@ def run_real_scan():
 
     return jsonify(scan_alert)
 
+# ─────────────────────────────────────────────
+# ROUTES: Breach Check, Stats, Logs
+# ─────────────────────────────────────────────
+
 @app.route('/api/breach-check', methods=['POST'])
 @jwt_required(optional=True)
 def email_breach_check():
@@ -244,19 +453,16 @@ def email_breach_check():
     email = request.json.get('email')
     if not email or "@" not in email:
         return jsonify({"error": "Invalid email"}), 400
-        
+
     result = breach_engine.check_email(email)
-    
+
     if user_id and result['pwned']:
-        # Save to user profile and notify
         monitored = MonitoredEmail.query.filter_by(user_id=user_id, email=email).first()
         if not monitored:
             monitored = MonitoredEmail(user_id=user_id, email=email)
             db.session.add(monitored)
         monitored.breach_count = result['count']
         db.session.commit()
-        
-        # Simulated notification
         send_alert_email(email, "Breach Detected", f"Your email was found in {result['count']} breaches.")
 
     return jsonify(result)
@@ -273,7 +479,7 @@ def get_stats():
         "system_health": "Optimal" if cpu < 80 else "Strained",
         "cpu_usage": cpu,
         "mem_usage": mem,
-        "blacklist_count": blacklist_total  # Global Intel: AbuseIPDB synced IPs
+        "blacklist_count": blacklist_total
     })
 
 @app.route('/api/logs/live', methods=['GET'])
@@ -284,7 +490,6 @@ def get_live_attacks():
 
 @app.route('/api/ddos-stats', methods=['GET'])
 def get_ddos_stats():
-    """Returns live DDoS protection statistics."""
     stats = DDoSGuard.stats()
     return jsonify(stats)
 
@@ -294,13 +499,10 @@ def add_to_blacklist():
     data = request.json
     ip = data.get('ip')
     reason = data.get('reason', 'Manual blacklist')
-    
     if not ip:
         return jsonify({"error": "IP is required"}), 400
-        
     if IPBlacklist.query.filter_by(ip_address=ip).first():
         return jsonify({"message": "IP already blacklisted"}), 200
-        
     new_entry = IPBlacklist(ip_address=ip, reason=reason)
     db.session.add(new_entry)
     db.session.commit()
@@ -309,5 +511,5 @@ def add_to_blacklist():
 if __name__ == '__main__':
     from waitress import serve
     port = int(os.environ.get('PORT', 5000))
-    print(f"AEGIS SOC ENGINE v2 (AI POWERED) RUNNING on 0.0.0.0:{port}")
+    print(f"AEGIS SOC ENGINE v3 (CLOUDFLARE-LEVEL AI) RUNNING on 0.0.0.0:{port}")
     serve(app, host='0.0.0.0', port=port)

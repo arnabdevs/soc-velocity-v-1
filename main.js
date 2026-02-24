@@ -153,29 +153,162 @@ function updateHealthGauge(score, hasMalware) {
     mal.style.color = hasMalware ? "var(--danger)" : "#444";
 }
 
-function showScanDetails(data) {
-    const details = document.getElementById('scan-result-details');
-    const content = document.getElementById('result-content');
-    details.classList.remove('hidden');
+window._activeTab = 'overview';
+window._scanData = null;
 
+function renderTab(tab, data) {
+    window._activeTab = tab;
+    const ip = data.ip_intel || {};
+    const dns = data.dns_records || {};
+    const whois = data.whois || {};
+    const vt = data.virustotal;
+    const abuse = data.abuseipdb;
     const sslColor = data.ssl_grade?.startsWith('A') ? 'var(--success)' : data.ssl_grade === 'N/A' ? '#888' : 'var(--danger)';
-    const urlscan = data.urlscan || {};
+    const scoreColor = data.health_score > 80 ? 'var(--success)' : data.health_score > 50 ? 'var(--warning)' : 'var(--danger)';
 
-    content.innerHTML = `
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-            <div>
-                <p><strong>Open Ports:</strong> ${data.open_ports?.join(', ') || 'None Detected'}</p>
-                <p><strong>Detected Services:</strong> ${data.services?.join(', ') || 'None'}</p>
-                <p><strong>SSL Grade:</strong> <span style="color: ${sslColor}; font-size: 1.2rem; font-weight: bold;">${data.ssl_grade || 'N/A'}</span></p>
-                ${urlscan.ip ? `<p><strong>Server IP:</strong> ${urlscan.ip} (${urlscan.country || 'Unknown'})</p>` : ''}
-                ${urlscan.server ? `<p><strong>Web Server:</strong> ${urlscan.server}</p>` : ''}
+    const tabs = ['overview', 'network', 'dns', 'reputation', 'whois'];
+    const tabBar = tabs.map(t => `
+        <button onclick="renderTab('${t}', window._scanData)"
+            style="background:${t === tab ? 'rgba(0,242,255,0.15)' : 'transparent'};border:1px solid ${t === tab ? 'var(--primary)' : 'rgba(255,255,255,0.08)'};
+            color:${t === tab ? 'var(--primary)' : '#666'};padding:0.4rem 0.9rem;border-radius:6px;cursor:pointer;font-size:0.7rem;font-family:monospace;letter-spacing:1px;">
+            ${t.toUpperCase().replace('DNS', 'DNS & CERTS')}
+        </button>`).join('');
+
+    let body = '';
+
+    if (tab === 'overview') {
+        const findings = data.malware_findings || [];
+        body = `
+        <div style="display:grid;grid-template-columns:160px 1fr;gap:1.5rem;align-items:start">
+            <div style="text-align:center;background:rgba(0,0,0,0.3);border-radius:12px;padding:1.2rem;border:1px solid rgba(255,255,255,0.05)">
+                <div style="font-size:0.6rem;color:#555;margin-bottom:0.5rem">THREAT SCORE</div>
+                <div style="font-size:2.8rem;font-weight:bold;color:${scoreColor};font-family:monospace">${data.health_score}%</div>
+                <div style="font-size:0.65rem;color:${scoreColor};margin-top:0.3rem">${data.status?.toUpperCase()}</div>
+                <div style="margin-top:1rem;font-size:0.65rem;color:#555">SSL GRADE</div>
+                <div style="font-size:1.6rem;font-weight:bold;color:${sslColor}">${data.ssl_grade || 'N/A'}</div>
             </div>
             <div>
-                <p><strong>Security Findings:</strong> <span style="color: ${data.malware_findings?.length ? 'var(--danger)' : 'var(--success)'}">${data.malware_findings?.length ? data.malware_findings.length + ' Issues Found' : 'Clean ✅'}</span></p>
-                <ul style="font-size: 0.7rem; margin-top: 0.5rem;">${(data.malware_findings || []).map(f => `<li style="margin-bottom: 4px; color: #f88;">${f}</li>`).join('')}</ul>
+                <div style="font-size:0.7rem;color:#555;margin-bottom:0.6rem">SECURITY FINDINGS (${findings.length})</div>
+                ${findings.length === 0
+                ? `<div style="color:var(--success);font-size:0.85rem">✅ No security issues detected</div>`
+                : findings.map(f => `<div style="background:rgba(255,0,60,0.07);border-left:2px solid var(--danger);padding:0.5rem 0.8rem;margin-bottom:0.4rem;font-size:0.75rem;color:#f88;border-radius:0 4px 4px 0">${f}</div>`).join('')
+            }
+                <div style="margin-top:1rem;font-size:0.7rem;color:#555">OPEN PORTS & SERVICES</div>
+                <div style="margin-top:0.4rem;display:flex;flex-wrap:wrap;gap:0.4rem">
+                    ${(data.open_ports || []).map(p => `<span style="background:rgba(0,242,255,0.08);border:1px solid rgba(0,242,255,0.2);padding:2px 8px;border-radius:4px;font-size:0.7rem;color:var(--primary)">${p}</span>`).join('')}
+                    ${(data.services || []).map(s => `<span style="background:rgba(112,0,255,0.08);border:1px solid rgba(112,0,255,0.2);padding:2px 8px;border-radius:4px;font-size:0.7rem;color:#a06fff">${s}</span>`).join('')}
+                </div>
             </div>
+        </div>`;
+    }
+
+    if (tab === 'network') {
+        const proxyBadge = ip.is_proxy ? `<span style="background:rgba(255,0,60,0.2);border:1px solid var(--danger);padding:2px 8px;border-radius:4px;font-size:0.65rem;color:var(--danger)">⚠ PROXY/VPN/TOR</span>` : `<span style="background:rgba(0,255,136,0.1);border:1px solid var(--success);padding:2px 8px;border-radius:4px;font-size:0.65rem;color:var(--success)">✓ CLEAN</span>`;
+        const hostingBadge = ip.is_hosting ? `<span style="background:rgba(0,242,255,0.1);border:1px solid var(--primary);padding:2px 8px;border-radius:4px;font-size:0.65rem;color:var(--primary)">DATACENTER/HOSTING</span>` : '';
+        body = `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+            ${[
+                ['SERVER IP', ip.ip || 'Unknown'],
+                ['COUNTRY', ip.country ? `${ip.country} ${ip.country_code ? '(' + ip.country_code + ')' : ''}` : 'Unknown'],
+                ['REGION / CITY', `${ip.region || '?'} / ${ip.city || '?'}`],
+                ['ISP', ip.isp || 'Unknown'],
+                ['ORGANIZATION', ip.org || 'Unknown'],
+                ['ASN', ip.asn || 'Unknown'],
+            ].map(([k, v]) => `
+                <div style="background:rgba(0,0,0,0.3);padding:0.8rem;border-radius:8px;border:1px solid rgba(255,255,255,0.05)">
+                    <div style="font-size:0.6rem;color:#555;margin-bottom:0.3rem">${k}</div>
+                    <div style="font-size:0.85rem;color:#ccc">${v}</div>
+                </div>`).join('')}
         </div>
-        `;
+        <div style="margin-top:1rem;display:flex;gap:0.5rem;flex-wrap:wrap">
+            <span style="font-size:0.7rem;color:#555">IP REPUTATION:</span>
+            ${proxyBadge} ${hostingBadge}
+        </div>`;
+    }
+
+    if (tab === 'dns') {
+        const subs = data.subdomains || [];
+        body = `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+            <div>
+                <div style="font-size:0.7rem;color:#555;margin-bottom:0.6rem">DNS RECORDS</div>
+                ${Object.entries(dns).map(([type, vals]) => vals.length ? `
+                    <div style="margin-bottom:0.8rem">
+                        <span style="background:rgba(0,242,255,0.1);padding:2px 8px;border-radius:4px;font-size:0.65rem;color:var(--primary);font-weight:bold">${type}</span>
+                        ${vals.map(v => `<div style="font-size:0.75rem;color:#aaa;padding:0.3rem 0.5rem;border-left:1px solid rgba(255,255,255,0.05);margin-top:0.2rem">${v || '—'}</div>`).join('')}
+                    </div>` : '').join('') || '<div style="color:#444;font-size:0.8rem">No DNS records fetched</div>'}
+            </div>
+            <div>
+                <div style="font-size:0.7rem;color:#555;margin-bottom:0.6rem">SUBDOMAINS (${subs.length} via crt.sh)</div>
+                <div style="max-height:220px;overflow-y:auto">
+                    ${subs.length ? subs.map(s => `<div style="font-size:0.72rem;color:#aaa;padding:0.25rem 0.5rem;border-bottom:1px solid rgba(255,255,255,0.03)">${s}</div>`).join('') : '<div style="color:#444;font-size:0.8rem">No subdomains found</div>'}
+                </div>
+            </div>
+        </div>`;
+    }
+
+    if (tab === 'reputation') {
+        const vtSection = vt ? `
+            <div style="background:rgba(0,0,0,0.3);padding:1rem;border-radius:8px;border:1px solid rgba(255,255,255,0.05)">
+                <div style="font-size:0.7rem;color:#555;margin-bottom:0.8rem">VIRUSTOTAL ANALYSIS</div>
+                <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.5rem;text-align:center">
+                    ${[['MALICIOUS', vt.malicious, 'var(--danger)'], ['SUSPICIOUS', vt.suspicious, 'var(--warning)'], ['HARMLESS', vt.harmless, 'var(--success)'], ['UNDETECTED', vt.undetected, '#555']].map(([l, v, c]) => `
+                    <div style="background:rgba(0,0,0,0.4);padding:0.5rem;border-radius:6px">
+                        <div style="font-size:1.2rem;font-weight:bold;color:${c}">${v}</div>
+                        <div style="font-size:0.55rem;color:#555">${l}</div>
+                    </div>`).join('')}
+                </div>
+                <div style="margin-top:0.5rem;font-size:0.65rem;color:#444">Out of ${vt.total} security vendors</div>
+            </div>` : `<div style="background:rgba(0,0,0,0.2);padding:1rem;border-radius:8px;font-size:0.8rem;color:#444">VirusTotal: Set VIRUSTOTAL_API_KEY env var on Render to enable</div>`;
+
+        const abScore = abuse ? abuse.abuse_score : null;
+        const abColor = abScore > 50 ? 'var(--danger)' : abScore > 15 ? 'var(--warning)' : 'var(--success)';
+        const abSection = abuse ? `
+            <div style="background:rgba(0,0,0,0.3);padding:1rem;border-radius:8px;border:1px solid rgba(255,255,255,0.05)">
+                <div style="font-size:0.7rem;color:#555;margin-bottom:0.8rem">ABUSEIPDB SCORE</div>
+                <div style="display:flex;align-items:center;gap:1rem">
+                    <div style="font-size:2rem;font-weight:bold;color:${abColor}">${abScore}%</div>
+                    <div>
+                        <div style="font-size:0.75rem;color:#aaa">Abuse Confidence Score</div>
+                        <div style="font-size:0.65rem;color:#555">${abuse.total_reports} reports · ${abuse.usage_type || 'Unknown usage'}</div>
+                    </div>
+                </div>
+                <div style="background:rgba(255,255,255,0.05);border-radius:4px;height:6px;margin-top:0.8rem"><div style="height:100%;width:${abScore}%;background:${abColor};border-radius:4px;transition:width 0.5s"></div></div>
+            </div>` : `<div style="background:rgba(0,0,0,0.2);padding:1rem;border-radius:8px;font-size:0.8rem;color:#444">AbuseIPDB: Set ABUSEIPDB_API_KEY env var on Render to enable</div>`;
+
+        body = `<div style="display:flex;flex-direction:column;gap:1rem">${vtSection}${abSection}</div>`;
+    }
+
+    if (tab === 'whois') {
+        body = `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+            ${[
+                ['REGISTRAR', whois.registrar || 'Unknown'],
+                ['CREATED', whois.created || 'Unknown'],
+                ['EXPIRES', whois.expires || 'Unknown'],
+                ['LAST UPDATED', whois.updated || 'Unknown'],
+            ].map(([k, v]) => `
+                <div style="background:rgba(0,0,0,0.3);padding:0.8rem;border-radius:8px;border:1px solid rgba(255,255,255,0.05)">
+                    <div style="font-size:0.6rem;color:#555;margin-bottom:0.3rem">${k}</div>
+                    <div style="font-size:0.85rem;color:#ccc">${v}</div>
+                </div>`).join('')}
+        </div>
+        ${whois.status?.length ? `<div style="margin-top:1rem">
+            <div style="font-size:0.65rem;color:#555;margin-bottom:0.5rem">DOMAIN STATUS FLAGS</div>
+            <div style="display:flex;flex-wrap:wrap;gap:0.3rem">${whois.status.map(s => `<span style="background:rgba(0,242,255,0.06);border:1px solid rgba(0,242,255,0.15);padding:2px 8px;border-radius:4px;font-size:0.65rem;color:#888">${s}</span>`).join('')}</div>
+        </div>` : ''}`;
+    }
+
+    document.getElementById('result-content').innerHTML = `
+        <div style="display:flex;gap:0.5rem;margin-bottom:1rem;flex-wrap:wrap">${tabBar}</div>
+        <div style="font-size:0.8rem;color:#aaa">${body}</div>`;
+}
+
+function showScanDetails(data) {
+    window._scanData = data;
+    const details = document.getElementById('scan-result-details');
+    details.classList.remove('hidden');
+    renderTab('overview', data);
 }
 
 // --- Email Breach Checker ---

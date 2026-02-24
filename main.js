@@ -1,359 +1,276 @@
 // AEGIS SOC Engine - aegis-soc-engine - Protected by AI 🛡️
-// Chart.js loaded via CDN
-
-const alertFeed = document.getElementById('alert-feed');
-const mitreContent = document.getElementById('mitre-content');
 
 const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname === '';
+const API_BASE = isLocal ? 'http://localhost:5000' : 'https://soc-velocity-v-1-1.onrender.com';
 
-// Production API URL
-const PROD_API_BASE = 'https://soc-velocity-v-1-1.onrender.com';
-let API_BASE = isLocal ? 'http://localhost:5000' : PROD_API_BASE;
+let AUTH_TOKEN = localStorage.getItem('AEGIS_TOKEN') || null;
 
-console.log(`🔗 CONNECTING TO API: ${API_BASE}`);
-
-function initDashboard() {
-    console.log("🚀 Initializing AEGIS Mission Control...");
-    checkBackend();
+// --- Initialization ---
+function init() {
+    console.log("🚀 AEGIS MISSION CONTROL INITIALIZED");
     fetchStats();
-    fetchAlerts();
+    updateUserStatus();
+    startLiveFeed();
+    initCharts();
 }
 
-async function checkBackend() {
+// --- Auth Functions ---
+window.toggleModal = (id) => document.getElementById(id).classList.toggle('hidden');
+
+window.toggleAuth = (type) => {
+    document.getElementById('login-modal').classList.add('hidden');
+    document.getElementById('signup-modal').classList.add('hidden');
+    document.getElementById(`${type}-modal`).classList.remove('hidden');
+};
+
+async function handleLogin() {
+    const email = document.getElementById('login-email').value;
+    const password = document.getElementById('login-pass').value;
+
     try {
-        const response = await fetch(`${API_BASE}/api/health`);
-        const data = await response.json();
-        console.log("✅ Backend connection verified:", data);
-
-        document.getElementById('engine-status').textContent = "ACTIVE";
-        document.getElementById('engine-status').style.color = "var(--success)";
-
-        const nmapEl = document.getElementById('nmap-status');
-        if (nmapEl) {
-            nmapEl.textContent = data.nmap_available ? "READY" : "MISSING";
-            nmapEl.style.color = data.nmap_available ? "var(--success)" : "var(--danger)";
+        const resp = await fetch(`${API_BASE}/api/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+        });
+        const data = await resp.json();
+        if (data.access_token) {
+            AUTH_TOKEN = data.access_token;
+            localStorage.setItem('AEGIS_TOKEN', AUTH_TOKEN);
+            updateUserStatus();
+            toggleModal('login-modal');
+            alert("✅ Authenticated Successfully");
+        } else {
+            alert("❌ " + (data.error || "Login Failed"));
         }
+    } catch (e) { console.error(e); }
+}
 
-        const intelEl = document.getElementById('intel-status');
-        if (intelEl) {
-            intelEl.textContent = data.whois_available ? "READY" : "LIMITED";
-            intelEl.style.color = data.whois_available ? "var(--success)" : "var(--warning)";
+async function handleSignup() {
+    const email = document.getElementById('signup-email').value;
+    const password = document.getElementById('signup-pass').value;
+
+    try {
+        const resp = await fetch(`${API_BASE}/api/auth/signup`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+        });
+        const data = await resp.json();
+        if (resp.status === 201) {
+            alert("✅ Identity Created. Please Log In.");
+            toggleAuth('login');
+        } else {
+            alert("❌ " + (data.error || "Signup Failed"));
         }
-    } catch (e) {
-        console.error("❌ Backend unreachable:", e);
-        document.getElementById('engine-status').textContent = "OFFLINE";
-        document.getElementById('engine-status').style.color = "var(--danger)";
-    }
+    } catch (e) { console.error(e); }
 }
 
-// Public access - skip auth
-initDashboard();
-
-async function fetchStats() {
-    try {
-        const response = await fetch(`${API_BASE}/api/stats`);
-        const data = await response.json();
-        document.getElementById('total-analyzed').textContent = data.total_analyzed.toLocaleString();
-        document.getElementById('threats-blocked').textContent = data.threats_blocked;
-        document.getElementById('active-anomalies').textContent = data.active_anomalies;
-        document.getElementById('system-health').textContent = data.system_health;
-        document.getElementById('engine-status').textContent = "ACTIVE";
-    } catch (error) {
-        console.error('Error fetching stats:', error);
-    }
-}
-
-async function fetchAlerts() {
-    try {
-        // First try to get recent alerts (new results)
-        let response = await fetch(`${API_BASE}/api/alerts/recent`);
-        let alerts = await response.json();
-
-        // If no new alerts, populate with history to avoid empty dashboard
-        if (alerts.length === 0) {
-            const histResp = await fetch(`${API_BASE}/api/logs`);
-            const history = await histResp.json();
-            alerts = history.slice(0, 5); // Just show the latest 5 in the feed
-
-            // Auto-show the most recent intelligence report if it exists
-            if (alerts.length > 0) {
-                console.log("📍 Auto-loading most recent security report...");
-                showMitreDetails(alerts[0]);
+function updateUserStatus() {
+    const statusEl = document.getElementById('user-status');
+    if (AUTH_TOKEN) {
+        statusEl.innerText = "IDENTITY ACTIVE";
+        statusEl.style.color = "var(--success)";
+        statusEl.onclick = () => {
+            if (confirm("Logout?")) {
+                AUTH_TOKEN = null;
+                localStorage.removeItem('AEGIS_TOKEN');
+                updateUserStatus();
             }
-        }
-
-        alerts.forEach(alert => addAlertToFeed(alert));
-    } catch (e) { console.error("Error fetching alerts:", e); }
-}
-
-function addAlertToFeed(alert) {
-    if (!alertFeed) return;
-    const item = document.createElement('div');
-    item.className = `alert-item ${alert.severity}`;
-    item.innerHTML = `
-        <div class="alert-header">
-            <span class="alert-type">${alert.type} ${alert.alert_id}</span>
-            <span class="alert-severity">${alert.severity}</span>
-        </div>
-        <div class="alert-details">
-            Confidence: ${alert.confidence}% | Site: <span style="color: var(--primary)">${alert.target_site}</span>
-        </div>
-    `;
-
-    item.onclick = () => showMitreDetails(alert);
-    alertFeed.insertBefore(item, alertFeed.children[1]);
-
-    if (alertFeed.children.length > 21) {
-        alertFeed.removeChild(alertFeed.lastChild);
+        };
+    } else {
+        statusEl.innerText = "LOG IN";
+        statusEl.style.color = "var(--primary)";
+        statusEl.onclick = () => toggleModal('login-modal');
     }
 }
 
-function showMitreDetails(alert) {
-    if (!mitreContent) return;
+// --- View Switching ---
+window.switchView = (viewName) => {
+    document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
+    document.getElementById(`${viewName} - view`).classList.remove('hidden');
 
-    let findingsHtml = '';
+    document.querySelectorAll('nav li').forEach(li => {
+        li.classList.toggle('active', li.textContent.toLowerCase().includes(viewName.replace('-', ' ')));
+    });
+};
 
-    if (alert.web_security_issues && alert.web_security_issues.length > 0) {
-        findingsHtml += `
-            <div style="margin-top: 1rem; padding: 1rem; background: rgba(255,204,0,0.05); border-radius: 8px; border: 1px solid rgba(255,204,0,0.2);">
-                <h4 style="color: var(--warning); font-size: 0.8rem; margin-bottom: 0.8rem; display: flex; align-items: center; gap: 0.5rem;">
-                    <span>⚠️</span> WEB SECURITY GAPS
-                </h4>
-                <ul style="font-size: 0.85rem; padding-left: 1.2rem; color: #ddd; line-height: 1.5;">
-                    ${alert.web_security_issues.map(issue => `<li>${issue}</li>`).join('')}
-                </ul>
-            </div>
-        `;
-    }
-
-    if (alert.detected_services && alert.detected_services.length > 0) {
-        findingsHtml += `
-            <div style="margin-top: 1rem;">
-                <h4 style="color: var(--primary); font-size: 0.8rem; margin-bottom: 0.8rem;">DETECTED SERVICES</h4>
-                <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-                    ${alert.detected_services.map(s => `<span style="background: rgba(0,242,255,0.1); padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; border: 1px solid rgba(0,242,255,0.3); color: white;">${s}</span>`).join('')}
-                </div>
-            </div>
-        `;
-    }
-
-    if (alert.domain_info && alert.domain_info.registrar) {
-        findingsHtml += `
-            <div style="margin-top: 1rem; padding: 1rem; background: rgba(112,0,255,0.05); border-radius: 8px; border: 1px solid rgba(112,0,255,0.2);">
-                <h4 style="color: var(--secondary); font-size: 0.8rem; margin-bottom: 0.5rem;">DOMAIN INTELLIGENCE</h4>
-                <div style="font-size: 0.8rem; color: #ccc; display: grid; grid-template-columns: 1fr; gap: 0.4rem;">
-                    <div>Registrar: <span style="color: white; font-family: monospace;">${alert.domain_info.registrar}</span></div>
-                    <div>Status: <span style="color: var(--success);">ACTIVE</span></div>
-                </div>
-            </div>
-        `;
-    }
-
-    if (alert.recommendations && alert.recommendations.length > 0) {
-        findingsHtml += `
-            <div style="margin-top: 1rem; padding: 1rem; background: rgba(0,255,136,0.05); border-radius: 8px; border: 1px solid rgba(0,255,136,0.2);">
-                <h4 style="color: var(--success); font-size: 0.8rem; margin-bottom: 0.8rem;">REMEDIATION STRATEGY</h4>
-                <ul style="font-size: 0.85rem; padding-left: 1.2rem; color: #ccc; line-height: 1.5;">
-                    ${alert.recommendations.map(rec => `<li>${rec}</li>`).join('')}
-                </ul>
-            </div>
-        `;
-    }
-
-    mitreContent.innerHTML = `
-        <div style="animation: fadeIn 0.5s ease-out;">
-            <div style="background: linear-gradient(135deg, rgba(0,242,255,0.1), transparent); padding: 1rem; border-radius: 8px; border-left: 4px solid var(--primary); margin-bottom: 1.5rem;">
-                <h2 style="color: white; font-size: 1.1rem; margin-bottom: 0.2rem;">${alert.target_site}</h2>
-                <p style="font-family: monospace; color: var(--primary); font-size: 0.75rem;">${alert.alert_id} | CONFIDENCE: ${alert.confidence}%</p>
-            </div>
-            
-            <p style="font-size: 0.9rem; line-height: 1.6; color: #eee; margin-bottom: 1rem;">${alert.description}</p>
-            
-            ${findingsHtml}
-            
-            <div style="margin-top: 1.5rem;">
-                <h4 style="color: #555; font-size: 0.7rem; margin-bottom: 0.5rem; text-transform: uppercase;">Technical Evidence</h4>
-                <pre style="background: #000; color: #0f8; padding: 1rem; border-radius: 6px; font-size: 0.75rem; overflow-x: auto; max-height: 200px; border: 1px solid #222; font-family: 'Courier New', monospace;">${alert.raw_output || 'No technical evidence found.'}</pre>
-            </div>
-        </div>
-    `;
-
-    // Auto-scroll to top of result
-    mitreContent.parentElement.scrollTop = 0;
-}
-
-window.runLiveScan = async function () {
+// --- Security Scan Logic ---
+window.runLiveScan = async () => {
     const target = document.getElementById('live-scan-input').value;
-    if (!target) return alert("Please enter a target domain/IP");
+    if (!target) return alert("Enter a target domain");
 
     const terminal = document.getElementById('scan-terminal');
     const terminalContent = document.getElementById('terminal-content');
     const scanBtn = document.getElementById('scan-btn');
 
     terminal.style.display = 'block';
-    terminalContent.innerHTML = '> INITIALIZING REAL-TIME SCAN...<br>';
+    terminalContent.innerHTML = `> INITIALIZING AI SECURITY AUDIT FOR ${target}...<br>`;
     scanBtn.disabled = true;
-    scanBtn.innerText = 'SCANNING...';
 
     const log = (msg) => {
         terminalContent.innerHTML += `> ${msg}<br>`;
         terminal.scrollTop = terminal.scrollHeight;
     };
 
-    setTimeout(() => log(`ESTABLISHING CONNECTION TO ${target}...`), 500);
-    setTimeout(() => log(`RUNNING NMAP VULNERABILITY ENGINE...`), 1500);
+    setTimeout(() => log("CHECKING AI ANOMALY PATTERNS..."), 800);
+    setTimeout(() => log("EXECUTING REAL-TIME NMAP DISCOVERY..."), 1500);
 
     try {
-        const response = await fetch(`${API_BASE}/api/scan`, {
+        const resp = await fetch(`${API_BASE}/api/scan`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': AUTH_TOKEN ? `Bearer ${AUTH_TOKEN}` : ''
+            },
             body: JSON.stringify({ target })
         });
-        const data = await response.json();
+        const data = await resp.json();
 
         if (data.error) {
-            log(`SCAN ERROR: ${data.error}`);
-            mitreContent.innerHTML = `
-                <div style="padding: 2rem; text-align: center; color: var(--danger); border: 1px dashed var(--danger); border-radius: 8px;">
-                    <div style="font-size: 2.5rem; margin-bottom: 1rem;">❌</div>
-                    <h3 style="margin-bottom: 0.5rem;">Vulnerability Scan Failed</h3>
-                    <p style="font-size: 0.8rem; color: #aaa; margin-bottom: 1rem;">Reason: ${data.error}</p>
-                    <div style="background: rgba(0,0,0,0.3); padding: 0.8rem; border-radius: 4px; text-align: left; font-size: 0.7rem; color: #ff8888; border: 1px solid rgba(255,0,0,0.2);">
-                        <strong>Suggested Fix:</strong>
-                        <ul style="margin-top: 0.4rem; padding-left: 1rem;">
-                            <li>Ensure the target domain is correct.</li>
-                            <li>The target might be blocking Nmap discovery scans.</li>
-                            <li>The backend is still updating with firewall-bypass (-Pn) support.</li>
-                        </ul>
+            log(`BLOCK: ${data.message || data.error}`);
+            return;
+        }
+
+        log(`AUDIT COMPLETE. SCORE: ${data.health_score}%`);
+        updateHealthGauge(data.health_score, data.malware_findings.length > 0);
+        showScanDetails(data);
+    } catch (e) { log(`SYSTEM ERROR: ${e.message}`); }
+    finally { scanBtn.disabled = false; }
+};
+
+function updateHealthGauge(score, hasMalware) {
+    const gauge = document.getElementById('health-score-gauge');
+    const text = document.getElementById('health-status-text');
+    const mal = document.getElementById('malware-status');
+
+    gauge.innerText = `${score}%`;
+    gauge.style.color = score > 80 ? 'var(--success)' : score > 50 ? 'var(--warning)' : 'var(--danger)';
+    text.innerText = score > 80 ? 'OPTIMAL' : score > 50 ? 'VULNERABLE' : 'CRITICAL';
+    text.style.color = gauge.style.color;
+
+    mal.innerText = hasMalware ? "MALWARE: DETECTED" : "MALWARE: CLEAN";
+    mal.style.color = hasMalware ? "var(--danger)" : "#444";
+}
+
+function showScanDetails(data) {
+    const details = document.getElementById('scan-result-details');
+    const content = document.getElementById('result-content');
+    details.classList.remove('hidden');
+
+    content.innerHTML = `
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div>
+                <p><strong>Open Ports:</strong> ${data.open_ports.join(', ') || 'None'}</p>
+                <p><strong>Detected Services:</strong> ${data.services.join(', ') || 'None'}</p>
+            </div>
+            <div>
+                <p><strong>Malware Findings:</strong> <span style="color: ${data.malware_findings.length ? 'var(--danger)' : 'var(--success)'}">${data.malware_findings.length || '0 Clean Indicators'}</span></p>
+                <ul style="font-size: 0.7rem;">${data.malware_findings.map(f => `<li>${f}</li>`).join('')}</ul>
+            </div>
+        </div>
+        `;
+}
+
+// --- Email Breach Checker ---
+window.checkEmailBreach = async () => {
+    const email = document.getElementById('breach-email-input').value;
+    if (!email) return alert("Enter an email");
+
+    const resultDiv = document.getElementById('breach-result');
+    resultDiv.classList.remove('hidden');
+    resultDiv.innerHTML = `<div style="text-align: center; color: var(--primary);">SCANNING GLOBAL DATABASES...</div>`;
+
+    try {
+        const resp = await fetch(`${API_BASE}/api/breach-check`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': AUTH_TOKEN ? `Bearer ${AUTH_TOKEN}` : ''
+            },
+            body: JSON.stringify({ email })
+        });
+        const data = await resp.json();
+
+        if (data.pwned) {
+            resultDiv.innerHTML = `
+                <div style="background: rgba(255,0,0,0.1); border: 1px solid var(--danger); padding: 1.5rem; border-radius: 8px;">
+                    <h3 style="color: var(--danger);">BREACH DETECTED!</h3>
+                    <p>This email was found in <strong>${data.count}</strong> confirmed data breaches.</p>
+                    <div style="margin-top: 1rem; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.5rem;">
+                        ${data.breaches.map(b => `<div style="background: #000; padding: 0.5rem; border-radius: 4px; font-size: 0.7rem;">${b.name} (${b.year})</div>`).join('')}
                     </div>
                 </div>
             `;
         } else {
-            log(`SCAN COMPLETE. DETECTED ${data.health_score}% HEALTH.`);
-            log(`AUTOLOADING DETAILED INTELLIGENCE REPORT...`);
-            updateHealthGauge(data.health_score);
-            addAlertToFeed(data);
-            showMitreDetails(data);
+            resultDiv.innerHTML = `<div style="color: var(--success); text-align: center;">NO BREACHES DETECTED. IDENTITY IS CLEAN.</div>`;
         }
-    } catch (e) {
-        log(`CRITICAL SYSTEM ERROR: ${e.message}`);
-    } finally {
-        scanBtn.disabled = false;
-        scanBtn.innerText = 'RUN LIVE SCAN';
-    }
+    } catch (e) { alert("Error checking breach"); }
 };
 
-async function fetchLogs() {
-    try {
-        const response = await fetch(`${API_BASE}/api/logs`);
-        const logs = await response.json();
-        const body = document.getElementById('log-table-body');
-        if (!body) return;
-        body.innerHTML = '';
-        logs.forEach(log => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td style="padding: 1rem;">${log.timestamp}</td>
-                <td style="padding: 1rem;">${log.type}</td>
-                <td style="padding: 1rem;"><span class="alert-severity">${log.severity}</span></td>
-                <td style="padding: 1rem;">${log.technique_name}</td>
-                <td style="padding: 1rem;">${log.confidence}%</td>
-            `;
-            body.appendChild(tr);
-        });
-    } catch (e) { console.error(e); }
+// --- Live Attack Feed ---
+function startLiveFeed() {
+    const feed = document.getElementById('live-attack-feed');
+    setInterval(async () => {
+        try {
+            const resp = await fetch(`${API_BASE}/api/logs/live`);
+            const attacks = await resp.json();
+
+            attacks.forEach(atk => {
+                if (feed.children.length === 1 && feed.children[0].textContent.includes("No active")) feed.innerHTML = '';
+
+                const entry = document.createElement('div');
+                entry.className = 'attack-entry';
+                entry.innerHTML = `
+        <div style="display: flex; justify-content: space-between; font-weight: bold; color: var(--danger);">
+            <span>${atk.type}</span>
+            <span>${atk.timestamp}</span>
+        </div>
+        <div style="font-size: 0.7rem; color: #666;">Source: ${atk.origin} -> Target: ${atk.origin.split('.')[0]}.*</div>
+        `;
+                feed.insertBefore(entry, feed.firstChild);
+                if (feed.children.length > 5) feed.removeChild(feed.lastChild);
+            });
+        } catch (e) { }
+    }, 5000);
 }
 
-function updateHealthGauge(score) {
-    const gauge = document.getElementById('health-score-gauge');
-    const statusText = document.getElementById('health-status-text');
-    if (!gauge) return;
+async function fetchStats() {
+    try {
+        const resp = await fetch(`${API_BASE}/api/stats`);
+        const data = await resp.json();
+        document.getElementById('total-analyzed').innerText = data.total_scans;
+        document.getElementById('threats-blocked').innerText = data.threats_blocked;
+        document.getElementById('system-health').innerText = `${data.cpu_usage}%`;
 
-    gauge.innerText = `${score}%`;
-
-    let color = 'var(--success)';
-    let status = 'OPTIMAL';
-
-    if (score < 50) {
-        color = 'var(--danger)';
-        status = 'CRITICAL';
-    } else if (score < 80) {
-        color = 'var(--warning)';
-        status = 'VULNERABLE';
-    }
-
-    gauge.style.borderColor = color;
-    gauge.style.color = color;
-    gauge.style.boxShadow = `0 0 20px ${color}44`;
-    if (statusText) {
-        statusText.innerText = status;
-        statusText.style.color = color;
-    }
+        // AEGIS Pro: Update Global Sync Count
+        if (data.blacklist_count) {
+            document.getElementById('global-sync-count').innerText = data.blacklist_count.toLocaleString();
+            document.getElementById('global-intel-status').innerText = "ACTIVE";
+            document.getElementById('global-intel-status').style.color = "var(--success)";
+        } else {
+            document.getElementById('global-intel-status').innerText = "OFFLINE";
+            document.getElementById('global-intel-status').style.color = "var(--warning)";
+        }
+    } catch (e) { }
 }
 
-window.simulateAttack = async function (type) {
-    try {
-        const response = await fetch(`${API_BASE}/api/simulate`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type })
-        });
-        const data = await response.json();
-        fetchAlerts();
-    } catch (e) { console.error(e); }
-};
-
-// Navigation Logic
-const navItems = document.querySelectorAll('nav li');
-const views = document.querySelectorAll('.view');
-
-navItems.forEach(item => {
-    item.addEventListener('click', () => {
-        navItems.forEach(nav => nav.classList.remove('active'));
-        item.classList.add('active');
-
-        const targetViewId = item.textContent.toLowerCase().replace(/\s/g, '-') + '-view';
-        console.log("Switching to view:", targetViewId);
-
-        views.forEach(view => {
-            if (view.id === targetViewId) {
-                view.classList.remove('hidden');
-                if (view.id === 'vulnerability-logs-view') fetchLogs();
-                if (view.id === 'threat-hub-view') initMLCharts();
-            } else {
-                view.classList.add('hidden');
-            }
-        });
-    });
-});
-
-// Threat Hub Charts
-async function initMLCharts() {
-    try {
-        const response = await fetch(`${API_BASE}/api/ml/metrics`);
-        const data = await response.json();
-
-        const ctx = document.getElementById('feature-chart');
-        if (!ctx) return;
-
-        new Chart(ctx, {
-            type: 'bar',
+function initCharts() {
+    const ctx1 = document.getElementById('threat-chart');
+    if (ctx1) {
+        new Chart(ctx1, {
+            type: 'doughnut',
             data: {
-                labels: data.features,
+                labels: ['SQLi', 'XSS', 'DDoS', 'Brute Force'],
                 datasets: [{
-                    label: 'System Load Metrics',
-                    data: data.importances,
-                    backgroundColor: 'rgba(0, 242, 255, 0.5)',
-                    borderColor: 'var(--primary)',
-                    borderWidth: 1
+                    data: [12, 19, 3, 5],
+                    backgroundColor: ['#00f2ff', '#7000ff', '#ff003c', '#00ff88'],
+                    borderWidth: 0
                 }]
             },
-            options: {
-                responsive: true,
-                indexAxis: 'y',
-                scales: { x: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' } }, y: { grid: { display: false } } },
-                plugins: { legend: { display: false } }
-            }
+            options: { plugins: { legend: { position: 'bottom', labels: { color: '#666', font: { size: 10 } } } } }
         });
-    } catch (e) { console.error(e); }
+    }
 }
+
+init();

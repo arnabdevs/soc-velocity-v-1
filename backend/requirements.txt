@@ -4,3 +4,10 @@ waitress
 psutil
 requests
 python-whois
+flask-sqlalchemy
+flask-jwt-extended
+flask-limiter
+scikit-learn
+pandas
+numpy
+python-dotenv
